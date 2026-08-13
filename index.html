@@ -1,0 +1,80 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Pixel Perfect</title>
+    <link rel="icon" href="./images/pixel-perfect.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./styles.css" />
+  </head>
+  <body>
+    <header class="toolbar">
+      <div class="group">
+        <button id="openButton" type="button" title="Open image">Open</button>
+        <input id="fileInput" type="file" accept="image/*" hidden />
+      </div>
+
+      <div class="group" role="toolbar" aria-label="Tools">
+        <button class="tool is-active" type="button" data-tool="select" title="Select (V)" aria-label="Select">
+          <img src="./images/select.svg" alt="" />
+        </button>
+        <button class="tool" type="button" data-tool="rect" title="Rectangle (R)" aria-label="Rectangle">
+          <img src="./images/rectangle.svg" alt="" />
+        </button>
+        <button class="tool" type="button" data-tool="distance" title="Distance (D)" aria-label="Distance">
+          <img src="./images/distance.svg" alt="" />
+        </button>
+        <button class="tool" type="button" data-tool="eyedropper" title="Eyedropper (I)" aria-label="Eyedropper">
+          <img src="./images/eyedrop.svg" alt="" />
+        </button>
+      </div>
+
+      <div class="group">
+        <button id="zoomOut" type="button" title="Zoom out around center">-</button>
+        <button id="zoomIn" type="button" title="Zoom in around center">+</button>
+        <button id="zoomActual" type="button" title="Zoom 100% (Cmd/Ctrl+1)">100%</button>
+        <button id="zoomFit" type="button" title="Fit to screen (Cmd/Ctrl+0)">Fit</button>
+        <button id="clearMeasurements" type="button" title="Clear measurements and guides">Clear</button>
+      </div>
+
+      <div class="group">
+        <label class="theory" title="Theoretical width used to scale measurements">
+          Theo W
+          <input id="theoryWidth" type="number" min="1" step="1" placeholder="px" />
+        </label>
+        <label class="toggle" title="Snap rectangle and distance points to guides">
+          <input id="snapToGuides" type="checkbox" />
+          Snap to guides
+        </label>
+      </div>
+
+      <div class="group group-right">
+        <button id="exportJson" type="button" title="Export measurements as JSON">Export</button>
+        <button id="importJson" type="button" title="Import measurements from JSON">Import</button>
+        <input id="jsonInput" type="file" accept="application/json,.json" hidden />
+      </div>
+    </header>
+
+    <main id="dropZone" class="workspace">
+      <canvas id="stage"></canvas>
+      <div id="emptyState" class="empty-state">
+        <strong>Drop a screenshot here</strong>
+        <span>Open a local image or paste one with Cmd/Ctrl+V.</span>
+      </div>
+      <section id="recentProjects" class="recent-projects" aria-label="Recent projects" hidden>
+        <h2>Recent projects</h2>
+        <div id="recentProjectList" class="recent-project-list"></div>
+      </section>
+    </main>
+
+    <footer class="statusbar">
+      <span id="imageInfo">Image: -</span>
+      <span id="zoomInfo">Zoom: 100%</span>
+      <span id="cursorInfo">X: - Y: -</span>
+      <button id="colorInfo" type="button" title="Copy HEX">Color: -</button>
+      <span id="hintInfo">Guides: drag from rulers | Space+drag: pan | Cmd/Ctrl/Alt+wheel: zoom | Esc: cancel</span>
+    </footer>
+
+    <script defer src="./app.js"></script>
+  </body>
+</html>
