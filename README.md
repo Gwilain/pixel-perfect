@@ -87,15 +87,22 @@ No image or measurement data is sent anywhere.
 
 ```text
 .
-├── index.html
-├── styles.css
-├── app.js
-└── images/
-    ├── pixel-perfect.svg
-    ├── select.svg
-    ├── rectangle.svg
-    ├── distance.svg
-    └── eyedrop.svg
+|-- index.html
+|-- styles.css
+|-- js/
+|   |-- core.js
+|   |-- project.js
+|   |-- interaction.js
+|   |-- render.js
+|   `-- events.js
+`-- images/
+    |-- pixel-perfect.svg
+    |-- select.svg
+    |-- rectangle.svg
+    |-- distance.svg
+    |-- zoom.svg
+    |-- crop.svg
+    `-- eyedrop.svg
 ```
 
 ## Deploy With GitHub Pages
