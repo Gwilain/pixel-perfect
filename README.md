@@ -16,6 +16,10 @@ It is built as a static app with plain HTML, CSS and JavaScript. There is no bac
 - Edit existing distances by moving endpoints.
 - Add draggable guides from the top and left rulers.
 - Optional `Snap to guides` for rectangles and distances.
+- Smart guides for temporary alignment with existing rectangle edges and distance points.
+- Optional `Pixel perfect` mode with a cursor loupe and whole-pixel snapping for rectangles and distances.
+- Custom colors for rectangles, distances, guides and their selected states.
+- Adjustable loupe frame size for pixel-perfect inspection.
 - Pick colors with the eyedropper.
 - Keep copied color swatches and copy them again by clicking.
 - Export and import measurements as JSON.

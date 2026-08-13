@@ -57,6 +57,13 @@ input {
   border-bottom: 1px solid var(--line);
 }
 
+.app-icon {
+  width: 24px;
+  height: 24px;
+  flex: 0 0 auto;
+  display: block;
+}
+
 .statusbar {
   height: 30px;
   padding: 4px 10px;
@@ -93,6 +100,84 @@ input {
 
 .group-right {
   margin-left: auto;
+}
+
+.settings {
+  position: relative;
+}
+
+.settings-panel {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 8px);
+  right: 0;
+  width: 240px;
+  padding: 10px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  background: rgba(24, 27, 31, 0.98);
+  box-shadow: 0 12px 36px var(--shadow);
+}
+
+.settings-panel[hidden] {
+  display: none;
+}
+
+.settings-title {
+  margin-bottom: 8px;
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+  text-transform: uppercase;
+}
+
+.settings-title-spaced {
+  margin-top: 12px;
+}
+
+.settings-panel label {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  min-height: 30px;
+  color: var(--text);
+}
+
+.settings-panel input[type="color"] {
+  width: 38px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: transparent;
+  cursor: pointer;
+}
+
+.range-setting {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+}
+
+.range-setting input[type="range"] {
+  width: 100%;
+  accent-color: var(--accent);
+}
+
+.range-setting output {
+  min-width: 48px;
+  color: var(--muted);
+  text-align: right;
+}
+
+.setting-toggle {
+  justify-content: flex-start;
+  margin-top: 6px;
+}
+
+#resetSettings {
+  width: 100%;
+  margin-top: 8px;
 }
 
 button {

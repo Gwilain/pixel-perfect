@@ -9,6 +9,7 @@
   </head>
   <body>
     <header class="toolbar">
+      <img class="app-icon" src="./images/pixel-perfect.svg" alt="" />
       <div class="group">
         <button id="openButton" type="button" title="Open image">Open</button>
         <input id="fileInput" type="file" accept="image/*" hidden />
@@ -42,9 +43,9 @@
           Theo W
           <input id="theoryWidth" type="number" min="1" step="1" placeholder="px" />
         </label>
-        <label class="toggle" title="Snap rectangle and distance points to guides">
-          <input id="snapToGuides" type="checkbox" />
-          Snap to guides
+        <label class="toggle" title="Show a loupe and snap rectangle and distance points to whole pixels">
+          <input id="pixelPerfectMode" type="checkbox" />
+          Pixel perfect
         </label>
       </div>
 
@@ -52,6 +53,51 @@
         <button id="exportJson" type="button" title="Export measurements as JSON">Export</button>
         <button id="importJson" type="button" title="Import measurements from JSON">Import</button>
         <input id="jsonInput" type="file" accept="application/json,.json" hidden />
+        <div class="settings">
+          <button id="settingsButton" type="button" title="Settings" aria-label="Settings" aria-haspopup="true" aria-expanded="false">&#8942;</button>
+          <section id="settingsPanel" class="settings-panel" aria-label="Settings" hidden>
+            <div class="settings-title">Colors</div>
+            <label>
+              Rectangle
+              <input type="color" data-color-setting="rect" />
+            </label>
+            <label>
+              Rectangle selected
+              <input type="color" data-color-setting="rectSelected" />
+            </label>
+            <label>
+              Distance
+              <input type="color" data-color-setting="distance" />
+            </label>
+            <label>
+              Distance selected
+              <input type="color" data-color-setting="distanceSelected" />
+            </label>
+            <label>
+              Guide
+              <input type="color" data-color-setting="guide" />
+            </label>
+            <label>
+              Guide selected
+              <input type="color" data-color-setting="guideSelected" />
+            </label>
+            <div class="settings-title settings-title-spaced">Loupe</div>
+            <label class="range-setting">
+              <span>Frame</span>
+              <input id="loupeFrameSize" type="range" min="17" max="37" step="2" />
+              <output id="loupeFrameSizeValue"></output>
+            </label>
+            <label class="toggle setting-toggle" title="Temporarily align measurements with other rectangle edges and distance points">
+              <input id="smartGuides" type="checkbox" />
+              Smart guides
+            </label>
+            <label class="toggle setting-toggle" title="Snap rectangle and distance points to manual guides">
+              <input id="snapToGuides" type="checkbox" />
+              Snap to guides
+            </label>
+            <button id="resetSettings" type="button">Reset settings</button>
+          </section>
+        </div>
       </div>
     </header>
 

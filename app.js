@@ -19,11 +19,30 @@ const elements = {
   importJson: document.querySelector("#importJson"),
   theoryWidth: document.querySelector("#theoryWidth"),
   snapToGuides: document.querySelector("#snapToGuides"),
+  pixelPerfectMode: document.querySelector("#pixelPerfectMode"),
+  settingsButton: document.querySelector("#settingsButton"),
+  settingsPanel: document.querySelector("#settingsPanel"),
+  colorSettings: [...document.querySelectorAll("[data-color-setting]")],
+  loupeFrameSize: document.querySelector("#loupeFrameSize"),
+  loupeFrameSizeValue: document.querySelector("#loupeFrameSizeValue"),
+  smartGuides: document.querySelector("#smartGuides"),
+  resetSettings: document.querySelector("#resetSettings"),
   imageInfo: document.querySelector("#imageInfo"),
   zoomInfo: document.querySelector("#zoomInfo"),
   cursorInfo: document.querySelector("#cursorInfo"),
   colorInfo: document.querySelector("#colorInfo"),
   hintInfo: document.querySelector("#hintInfo"),
+};
+
+const DEFAULT_SETTINGS = {
+  rect: "#F4C95D",
+  rectSelected: "#45D0A0",
+  distance: "#D98CFF",
+  distanceSelected: "#45D0A0",
+  guide: "#00D4FF",
+  guideSelected: "#FF3D8B",
+  loupeFrameSize: 17,
+  smartGuides: true,
 };
 
 const state = {
@@ -40,12 +59,17 @@ const state = {
   swatches: [],
   selectedId: null,
   hoverImage: null,
+  hoverSnapPoint: null,
   currentColor: null,
+  copyToast: null,
   draft: null,
   drag: null,
+  smartGuides: [],
   spacePressed: false,
   theoryWidth: null,
-  snapToGuides: false,
+  snapToGuides: true,
+  pixelPerfectMode: true,
+  settings: { ...DEFAULT_SETTINGS },
   recentProjects: [],
 };
 
@@ -57,14 +81,63 @@ const round = (value) => Math.round(value * 100) / 100;
 const smartRound = (value) => (Math.abs(value - Math.round(value)) < 0.05 ? Math.round(value) : round(value));
 const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 const isMac = navigator.platform.toLowerCase().includes("mac");
+const isHexColor = (value) => /^#[0-9a-f]{6}$/i.test(value);
 const RULER_SIZE = 18;
 const HANDLE_SIZE = 8;
 const SWATCH_SIZE = 28;
 const SWATCH_GAP = 6;
 const SNAP_DISTANCE = 8;
+const SETTINGS_KEY = "pixel-perfect:settings";
 const RECENT_PROJECTS_KEY = "pixel-perfect:recent-projects";
 const DB_NAME = "pixel-perfect-db";
 const DB_VERSION = 1;
+
+function colorAlpha(hex, alpha) {
+  if (!isHexColor(hex)) return `rgba(244, 201, 93, ${alpha})`;
+  const r = parseInt(hex.slice(1, 3), 16);
+  const g = parseInt(hex.slice(3, 5), 16);
+  const b = parseInt(hex.slice(5, 7), 16);
+  return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+function readSettings() {
+  try {
+    const payload = JSON.parse(localStorage.getItem(SETTINGS_KEY) ?? "{}");
+    const colorSettings = Object.fromEntries(
+      Object.entries(DEFAULT_SETTINGS)
+        .filter(([, fallback]) => typeof fallback === "string")
+        .map(([key, fallback]) => [
+          key,
+          isHexColor(payload[key]) ? payload[key].toUpperCase() : fallback,
+        ]),
+    );
+    const loupeFrameSize = Number(payload.loupeFrameSize);
+    return {
+      ...colorSettings,
+      loupeFrameSize: Number.isFinite(loupeFrameSize) ? clamp(Math.round(loupeFrameSize), 17, 37) : DEFAULT_SETTINGS.loupeFrameSize,
+      smartGuides: typeof payload.smartGuides === "boolean" ? payload.smartGuides : DEFAULT_SETTINGS.smartGuides,
+    };
+  } catch {
+    localStorage.removeItem(SETTINGS_KEY);
+    return { ...DEFAULT_SETTINGS };
+  }
+}
+
+function writeSettings(settings) {
+  state.settings = { ...DEFAULT_SETTINGS, ...settings };
+  localStorage.setItem(SETTINGS_KEY, JSON.stringify(state.settings));
+  syncSettingsControls();
+  render();
+}
+
+function syncSettingsControls() {
+  for (const input of elements.colorSettings) {
+    input.value = state.settings[input.dataset.colorSetting] ?? DEFAULT_SETTINGS[input.dataset.colorSetting];
+  }
+  elements.loupeFrameSize.value = state.settings.loupeFrameSize;
+  elements.loupeFrameSizeValue.textContent = `${state.settings.loupeFrameSize}px view`;
+  elements.smartGuides.checked = state.settings.smartGuides;
+}
 
 function resizeCanvas() {
   const rect = canvas.getBoundingClientRect();
@@ -115,6 +188,8 @@ function setTool(tool) {
   state.tool = tool;
   state.draft = null;
   state.drag = null;
+  state.smartGuides = [];
+  state.hoverSnapPoint = null;
   elements.toolButtons.forEach((button) => {
     button.classList.toggle("is-active", button.dataset.tool === tool);
   });
@@ -193,6 +268,10 @@ async function loadImageBlob(blob, name, options = {}) {
   state.measurements = [];
   state.guides = [];
   state.swatches = [];
+  state.snapToGuides = true;
+  state.pixelPerfectMode = true;
+  elements.snapToGuides.checked = state.snapToGuides;
+  elements.pixelPerfectMode.checked = state.pixelPerfectMode;
   state.selectedId = null;
   restoreFromStorage();
   elements.emptyState.hidden = true;
@@ -375,10 +454,101 @@ function snapPointToGuides(point) {
   };
 }
 
-function snapMovedRect(original, dx, dy) {
+function smartGuideReferences(excludeIds = new Set()) {
+  const references = [];
+  if (!state.settings.smartGuides || !state.image) return references;
+
+  for (const item of state.measurements) {
+    if (excludeIds.has(item.id)) continue;
+
+    if (item.type === "rect") {
+      const rect = normalizedRect(item);
+      references.push(
+        { orientation: "vertical", value: rect.x },
+        { orientation: "vertical", value: rect.x + rect.w / 2 },
+        { orientation: "vertical", value: rect.x + rect.w },
+        { orientation: "horizontal", value: rect.y },
+        { orientation: "horizontal", value: rect.y + rect.h / 2 },
+        { orientation: "horizontal", value: rect.y + rect.h },
+      );
+    }
+
+    if (item.type === "distance") {
+      references.push(
+        { orientation: "vertical", value: item.a.x },
+        { orientation: "vertical", value: item.b.x },
+        { orientation: "horizontal", value: item.a.y },
+        { orientation: "horizontal", value: item.b.y },
+      );
+    }
+  }
+
+  return references;
+}
+
+function nearestSmartGuideSnap(value, orientation, excludeIds = new Set()) {
+  const threshold = SNAP_DISTANCE / state.viewport.scale;
+  let nearest = null;
+  for (const reference of smartGuideReferences(excludeIds)) {
+    if (reference.orientation !== orientation) continue;
+    const delta = Math.abs(value - reference.value);
+    if (delta <= threshold && (!nearest || delta < nearest.delta)) {
+      nearest = { ...reference, delta };
+    }
+  }
+  return nearest;
+}
+
+function smartGuideLine(reference) {
+  if (!state.image || !reference) return null;
+  return reference.orientation === "vertical"
+    ? { orientation: "vertical", value: reference.value, from: 0, to: state.image.height }
+    : { orientation: "horizontal", value: reference.value, from: 0, to: state.image.width };
+}
+
+function snapPointToSmartGuides(point, excludeIds = new Set()) {
+  const xSnap = nearestSmartGuideSnap(point.x, "vertical", excludeIds);
+  const ySnap = nearestSmartGuideSnap(point.y, "horizontal", excludeIds);
+  return {
+    point: {
+      x: xSnap ? xSnap.value : point.x,
+      y: ySnap ? ySnap.value : point.y,
+    },
+    guides: [smartGuideLine(xSnap), smartGuideLine(ySnap)].filter(Boolean),
+  };
+}
+
+function nearestAlignmentSnap(value, orientation, excludeIds = new Set()) {
+  const guideSnap = nearestGuideSnap(value, orientation);
+  const smartSnap = nearestSmartGuideSnap(value, orientation, excludeIds);
+  if (guideSnap && (!smartSnap || guideSnap.delta <= smartSnap.delta)) return { ...guideSnap, smart: false };
+  return smartSnap ? { ...smartSnap, smart: true } : null;
+}
+
+function snapPointToPixel(point) {
+  if (!state.pixelPerfectMode) return point;
+  return {
+    x: Math.round(point.x),
+    y: Math.round(point.y),
+  };
+}
+
+function snapGuideValue(value) {
+  return state.pixelPerfectMode ? Math.round(value) : value;
+}
+
+function snapMeasurementPoint(point, options = {}) {
+  const guidePoint = snapPointToGuides(point);
+  const smartSnap = snapPointToSmartGuides(guidePoint, options.excludeIds);
+  if (options.collectSmartGuides) state.smartGuides = smartSnap.guides;
+  return snapPointToPixel(smartSnap.point);
+}
+
+function snapMovedRect(original, dx, dy, options = {}) {
   const rect = normalizedRect(original);
   let nextDx = dx;
   let nextDy = dy;
+  const smartGuides = [];
   const xCandidates = [
     { value: rect.x + dx, offset: rect.x },
     { value: rect.x + rect.w / 2 + dx, offset: rect.x + rect.w / 2 },
@@ -392,27 +562,37 @@ function snapMovedRect(original, dx, dy) {
 
   const xSnap = xCandidates
     .map((candidate) => {
-      const snap = nearestGuideSnap(candidate.value, "vertical");
-      return snap ? { dx: snap.value - candidate.offset, delta: snap.delta } : null;
+      const snap = nearestAlignmentSnap(candidate.value, "vertical", options.excludeIds);
+      return snap ? { dx: snap.value - candidate.offset, delta: snap.delta, smart: snap.smart, snap } : null;
     })
     .filter(Boolean)
     .sort((a, b) => a.delta - b.delta)[0];
   const ySnap = yCandidates
     .map((candidate) => {
-      const snap = nearestGuideSnap(candidate.value, "horizontal");
-      return snap ? { dy: snap.value - candidate.offset, delta: snap.delta } : null;
+      const snap = nearestAlignmentSnap(candidate.value, "horizontal", options.excludeIds);
+      return snap ? { dy: snap.value - candidate.offset, delta: snap.delta, smart: snap.smart, snap } : null;
     })
     .filter(Boolean)
     .sort((a, b) => a.delta - b.delta)[0];
 
   if (xSnap) nextDx = xSnap.dx;
   if (ySnap) nextDy = ySnap.dy;
+  if (xSnap?.smart) smartGuides.push(smartGuideLine(xSnap.snap));
+  if (ySnap?.smart) smartGuides.push(smartGuideLine(ySnap.snap));
+  if (options.collectSmartGuides) state.smartGuides = smartGuides.filter(Boolean);
   return { dx: nextDx, dy: nextDy };
 }
 
 function persist() {
   if (!state.imageSignature) return;
-  if (!state.measurements.length && !state.guides.length && !state.swatches.length && !state.theoryWidth && !state.snapToGuides) {
+  if (
+    !state.measurements.length &&
+    !state.guides.length &&
+    !state.swatches.length &&
+    !state.theoryWidth &&
+    !state.snapToGuides &&
+    !state.pixelPerfectMode
+  ) {
     localStorage.removeItem(`pixel-measure:${state.imageSignature}`);
     return;
   }
@@ -421,6 +601,7 @@ function persist() {
     imageSignature: state.imageSignature,
     theoryWidth: state.theoryWidth,
     snapToGuides: state.snapToGuides,
+    pixelPerfectMode: state.pixelPerfectMode,
     measurements: state.measurements,
     guides: state.guides,
     swatches: state.swatches,
@@ -438,9 +619,11 @@ function restoreFromStorage() {
     state.guides = Array.isArray(payload.guides) ? payload.guides : [];
     state.swatches = Array.isArray(payload.swatches) ? payload.swatches : [];
     state.theoryWidth = Number.isFinite(payload.theoryWidth) ? payload.theoryWidth : null;
-    state.snapToGuides = Boolean(payload.snapToGuides);
+    state.snapToGuides = typeof payload.snapToGuides === "boolean" ? payload.snapToGuides : true;
+    state.pixelPerfectMode = typeof payload.pixelPerfectMode === "boolean" ? payload.pixelPerfectMode : true;
     elements.theoryWidth.value = state.theoryWidth ?? "";
     elements.snapToGuides.checked = state.snapToGuides;
+    elements.pixelPerfectMode.checked = state.pixelPerfectMode;
   } catch {
     localStorage.removeItem(`pixel-measure:${state.imageSignature}`);
   }
@@ -457,6 +640,7 @@ function exportMeasurements() {
     },
     theoryWidth: state.theoryWidth,
     snapToGuides: state.snapToGuides,
+    pixelPerfectMode: state.pixelPerfectMode,
     measurements: state.measurements,
     guides: state.guides,
     swatches: state.swatches,
@@ -476,9 +660,11 @@ async function importMeasurements(file) {
   state.guides = Array.isArray(payload.guides) ? payload.guides : [];
   state.swatches = Array.isArray(payload.swatches) ? payload.swatches : [];
   state.theoryWidth = Number.isFinite(payload.theoryWidth) ? payload.theoryWidth : null;
-  state.snapToGuides = Boolean(payload.snapToGuides);
+  state.snapToGuides = typeof payload.snapToGuides === "boolean" ? payload.snapToGuides : true;
+  state.pixelPerfectMode = typeof payload.pixelPerfectMode === "boolean" ? payload.pixelPerfectMode : true;
   elements.theoryWidth.value = state.theoryWidth ?? "";
   elements.snapToGuides.checked = state.snapToGuides;
+  elements.pixelPerfectMode.checked = state.pixelPerfectMode;
   state.selectedId = null;
   persist();
   updateStatus();
@@ -590,8 +776,50 @@ function swatchRects() {
   });
 }
 
+function swatchBounds(rects = swatchRects()) {
+  if (!rects.length) return null;
+  const left = Math.min(...rects.map((rect) => rect.x));
+  const top = Math.min(...rects.map((rect) => rect.y));
+  const right = Math.max(...rects.map((rect) => rect.x + rect.width));
+  const bottom = Math.max(...rects.map((rect) => rect.y + rect.height));
+  return { left, top, right, bottom, width: right - left, height: bottom - top };
+}
+
+function selectedSwatch() {
+  return state.swatches.find((swatch) => swatch.id === state.selectedId) ?? state.swatches[0] ?? null;
+}
+
+function swatchCodeRect(rects = swatchRects()) {
+  const swatch = selectedSwatch();
+  const bounds = swatchBounds(rects);
+  if (!swatch || !bounds) return null;
+  ctx.save();
+  ctx.font = "12px ui-sans-serif, system-ui, sans-serif";
+  const width = Math.max(74, ctx.measureText(swatch.hex).width + 18);
+  ctx.restore();
+  return {
+    swatch,
+    x: bounds.left + (bounds.width - width) / 2,
+    y: bounds.bottom + 7,
+    width,
+    height: 24,
+  };
+}
+
 function swatchHit(screenPoint) {
-  for (const rect of swatchRects()) {
+  const rects = swatchRects();
+  const codeRect = swatchCodeRect(rects);
+  if (
+    codeRect &&
+    screenPoint.x >= codeRect.x &&
+    screenPoint.x <= codeRect.x + codeRect.width &&
+    screenPoint.y >= codeRect.y &&
+    screenPoint.y <= codeRect.y + codeRect.height
+  ) {
+    return { type: "swatch", item: codeRect.swatch, cursor: "pointer" };
+  }
+
+  for (const rect of rects) {
     if (
       screenPoint.x >= rect.x &&
       screenPoint.x <= rect.x + rect.width &&
@@ -604,12 +832,36 @@ function swatchHit(screenPoint) {
   return null;
 }
 
+function showCopyToast(text) {
+  const size = screenSize();
+  const rects = swatchRects();
+  const codeRect = swatchCodeRect(rects);
+  const anchor = codeRect
+    ? { x: codeRect.x + codeRect.width / 2, y: codeRect.y + codeRect.height + 6 }
+    : { x: size.width - 64, y: RULER_SIZE + 64 };
+  state.copyToast = {
+    text,
+    centerX: clamp(anchor.x, 64, size.width - 64),
+    y: clamp(anchor.y, RULER_SIZE + 8, size.height - 30),
+    until: performance.now() + 1300,
+  };
+  render();
+  window.setTimeout(() => {
+    if (state.copyToast?.until <= performance.now()) {
+      state.copyToast = null;
+      render();
+    }
+  }, 1350);
+}
+
 async function copyHex(hex) {
   try {
     await navigator.clipboard.writeText(hex);
     elements.hintInfo.textContent = `${hex} copied`;
+    showCopyToast(`${hex} copied`);
   } catch {
     elements.hintInfo.textContent = `${hex} selected`;
+    showCopyToast(`${hex} selected`);
   }
 }
 
@@ -747,6 +999,8 @@ function deleteSelected() {
 function cancelAction() {
   state.draft = null;
   state.drag = null;
+  state.smartGuides = [];
+  state.hoverSnapPoint = null;
   render();
 }
 
@@ -767,6 +1021,12 @@ function updateStatus() {
     elements.colorInfo.textContent = "Color: -";
     elements.colorInfo.style.color = "";
   }
+}
+
+function setSettingsPanelOpen(open) {
+  elements.settingsPanel.hidden = !open;
+  elements.settingsButton.classList.toggle("is-active", open);
+  elements.settingsButton.setAttribute("aria-expanded", String(open));
 }
 
 function drawImage() {
@@ -855,7 +1115,7 @@ function drawGuides() {
   ctx.save();
   for (const guide of state.guides) {
     const selected = guide.id === state.selectedId;
-    const color = selected ? "#ff3d8b" : "#00d4ff";
+    const color = selected ? state.settings.guideSelected : state.settings.guide;
     const start = {};
     const end = {};
     if (guide.orientation === "vertical") {
@@ -864,14 +1124,14 @@ function drawGuides() {
       start.y = 0;
       end.x = x;
       end.y = size.height;
-      drawLabel(`x ${Math.round(guide.value)}`, x + 6, RULER_SIZE + 18, selected);
+      drawLabel(`x ${Math.round(guide.value)}`, x + 6, RULER_SIZE + 18, selected, state.settings.guideSelected);
     } else {
       const y = toScreenPoint({ x: 0, y: guide.value }).y;
       start.x = 0;
       start.y = y;
       end.x = size.width;
       end.y = y;
-      drawLabel(`y ${Math.round(guide.value)}`, RULER_SIZE + 8, y + 18, selected);
+      drawLabel(`y ${Math.round(guide.value)}`, RULER_SIZE + 8, y + 18, selected, state.settings.guideSelected);
     }
     const crispStart = { ...start };
     const crispEnd = { ...end };
@@ -894,6 +1154,32 @@ function drawGuides() {
   ctx.restore();
 }
 
+function drawSmartGuides() {
+  if (!state.image || !state.smartGuides.length) return;
+  const size = screenSize();
+  ctx.save();
+  ctx.setLineDash([5, 4]);
+  ctx.lineCap = "butt";
+  ctx.strokeStyle = state.settings.guideSelected;
+  ctx.lineWidth = 1;
+
+  for (const guide of state.smartGuides) {
+    ctx.beginPath();
+    if (guide.orientation === "vertical") {
+      const x = Math.round(toScreenPoint({ x: guide.value, y: 0 }).x) + 0.5;
+      ctx.moveTo(x, RULER_SIZE);
+      ctx.lineTo(x, size.height);
+    } else {
+      const y = Math.round(toScreenPoint({ x: 0, y: guide.value }).y) + 0.5;
+      ctx.moveTo(RULER_SIZE, y);
+      ctx.lineTo(size.width, y);
+    }
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
 function drawMeasurements() {
   for (const item of [...state.measurements, state.draft].filter(Boolean)) {
     if (item.type === "rect") drawRectMeasurement(item);
@@ -908,8 +1194,8 @@ function drawRectMeasurement(item) {
   const selected = item.id === state.selectedId;
   ctx.save();
   ctx.lineWidth = selected ? 2 : 1.5;
-  ctx.strokeStyle = selected ? "#45d0a0" : "#f4c95d";
-  ctx.fillStyle = "rgba(244, 201, 93, 0.12)";
+  ctx.strokeStyle = selected ? state.settings.rectSelected : state.settings.rect;
+  ctx.fillStyle = colorAlpha(state.settings.rect, 0.12);
   ctx.setLineDash(item.id === "draft" ? [5, 4] : []);
   ctx.beginPath();
   ctx.rect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
@@ -921,6 +1207,7 @@ function drawRectMeasurement(item) {
     topLeft.x + 8,
     topLeft.y - 10,
     selected,
+    state.settings.rectSelected,
   );
   if (selected) drawRectHandles(item);
   ctx.restore();
@@ -934,7 +1221,7 @@ function drawDistanceMeasurement(item) {
   const dy = item.b.y - item.a.y;
   ctx.save();
   ctx.lineWidth = selected ? 2 : 1.5;
-  ctx.strokeStyle = selected ? "#45d0a0" : "#d98cff";
+  ctx.strokeStyle = selected ? state.settings.distanceSelected : state.settings.distance;
   ctx.fillStyle = ctx.strokeStyle;
   ctx.beginPath();
   ctx.moveTo(a.x, a.y);
@@ -947,6 +1234,7 @@ function drawDistanceMeasurement(item) {
     (a.x + b.x) / 2 + 8,
     (a.y + b.y) / 2 - 8,
     selected,
+    state.settings.distanceSelected,
   );
   if (selected) drawDistanceHandles(item);
   ctx.restore();
@@ -956,7 +1244,7 @@ function drawRectHandles(item) {
   ctx.save();
   ctx.setLineDash([]);
   ctx.fillStyle = "#111315";
-  ctx.strokeStyle = "#45d0a0";
+  ctx.strokeStyle = state.settings.rectSelected;
   ctx.lineWidth = 1.5;
   for (const handle of rectHandlePoints(item)) {
     const point = toScreenPoint(handle.point);
@@ -970,7 +1258,7 @@ function drawDistanceHandles(item) {
   ctx.save();
   ctx.setLineDash([]);
   ctx.fillStyle = "#111315";
-  ctx.strokeStyle = "#45d0a0";
+  ctx.strokeStyle = state.settings.distanceSelected;
   ctx.lineWidth = 1.5;
   for (const point of [item.a, item.b]) {
     const screenPoint = toScreenPoint(point);
@@ -984,9 +1272,10 @@ function drawDistanceHandles(item) {
 
 function drawSwatches() {
   if (!state.swatches.length) return;
+  const rects = swatchRects();
   ctx.save();
   ctx.font = "12px ui-sans-serif, system-ui, sans-serif";
-  for (const rect of swatchRects()) {
+  for (const rect of rects) {
     const selected = rect.swatch.id === state.selectedId;
     ctx.fillStyle = rect.swatch.hex;
     ctx.strokeStyle = selected ? "#ffffff" : "rgba(0, 0, 0, 0.78)";
@@ -997,11 +1286,45 @@ function drawSwatches() {
     ctx.fill();
     ctx.stroke();
     ctx.shadowBlur = 0;
-
-    if (selected) {
-      drawLabel(`${rect.swatch.hex} | X ${rect.swatch.x} Y ${rect.swatch.y}`, rect.x - 154, rect.y + 24, true);
-    }
   }
+
+  const codeRect = swatchCodeRect(rects);
+  if (codeRect) {
+    ctx.fillStyle = "rgba(10, 12, 15, 0.88)";
+    ctx.strokeStyle = "rgba(255, 255, 255, 0.22)";
+    ctx.lineWidth = 1;
+    roundedRect(codeRect.x, codeRect.y, codeRect.width, codeRect.height, 5);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = "#f5f7fa";
+    ctx.textAlign = "center";
+    ctx.textBaseline = "middle";
+    ctx.fillText(codeRect.swatch.hex, codeRect.x + codeRect.width / 2, codeRect.y + codeRect.height / 2 + 0.5);
+  }
+  ctx.restore();
+}
+
+function drawCopyToast() {
+  if (!state.copyToast) return;
+  if (state.copyToast.until <= performance.now()) {
+    state.copyToast = null;
+    return;
+  }
+  ctx.save();
+  ctx.font = "12px ui-sans-serif, system-ui, sans-serif";
+  const paddingX = 8;
+  const width = ctx.measureText(state.copyToast.text).width + paddingX * 2;
+  const height = 24;
+  const x = clamp(state.copyToast.centerX - width / 2, 8, screenSize().width - width - 8);
+  ctx.fillStyle = "rgba(10, 12, 15, 0.92)";
+  ctx.strokeStyle = state.settings.rectSelected;
+  ctx.lineWidth = 1;
+  roundedRect(x, state.copyToast.y, width, height, 5);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = "#f5f7fa";
+  ctx.textBaseline = "middle";
+  ctx.fillText(state.copyToast.text, x + paddingX, state.copyToast.y + height / 2 + 0.5);
   ctx.restore();
 }
 
@@ -1030,7 +1353,7 @@ function drawPoint(x, y) {
   ctx.fill();
 }
 
-function drawLabel(text, x, y, selected = false) {
+function drawLabel(text, x, y, selected = false, selectedColor = state.settings.rectSelected) {
   const size = screenSize();
   ctx.save();
   ctx.font = "12px ui-sans-serif, system-ui, sans-serif";
@@ -1041,8 +1364,8 @@ function drawLabel(text, x, y, selected = false) {
   const height = 24;
   const left = clamp(x, 6, size.width - width - 6);
   const top = clamp(y - height, 6, size.height - height - 6);
-  ctx.fillStyle = selected ? "rgba(20, 35, 30, 0.94)" : "rgba(10, 12, 15, 0.88)";
-  ctx.strokeStyle = selected ? "#45d0a0" : "rgba(255, 255, 255, 0.22)";
+  ctx.fillStyle = "rgba(10, 12, 15, 0.88)";
+  ctx.strokeStyle = selected ? selectedColor : "rgba(255, 255, 255, 0.22)";
   ctx.lineWidth = 1;
   roundedRect(left, top, width, height, 5);
   ctx.fill();
@@ -1066,17 +1389,174 @@ function roundedRect(x, y, width, height, radius) {
   ctx.closePath();
 }
 
+function shouldShowLoupe() {
+  if (!state.image || !state.hoverImage) return false;
+  if (state.tool === "eyedropper") return true;
+  if (state.pixelPerfectMode && state.drag?.type === "guide") return true;
+  return state.pixelPerfectMode && (state.tool === "select" || state.tool === "rect" || state.tool === "distance") && imageBoundsContain(state.hoverImage);
+}
+
+function loupeFocusPoint() {
+  if (state.drag?.type !== "guide") {
+    if (state.tool === "eyedropper") return state.hoverImage;
+    return state.hoverSnapPoint ?? snapPointToPixel(state.hoverImage);
+  }
+  const guide = state.drag.item;
+  if (guide.orientation === "vertical") {
+    return { x: guide.value, y: snapGuideValue(state.hoverImage.y) };
+  }
+  return { x: snapGuideValue(state.hoverImage.x), y: guide.value };
+}
+
+function loupeMeasurements() {
+  if (state.tool === "eyedropper") return [];
+  if (state.draft) return [state.draft];
+  if (state.drag?.item?.type === "rect" || state.drag?.item?.type === "distance") return [state.drag.item];
+  return state.measurements.filter((item) => item.id === state.selectedId);
+}
+
+function loupeGuide() {
+  if (state.drag?.type === "guide") return state.drag.item;
+  return state.guides.find((guide) => guide.id === state.selectedId) ?? null;
+}
+
+function drawLoupeMeasurementOverlay(origin, imagePoint, pixel) {
+  const items = loupeMeasurements();
+  if (!items.length) return;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(origin.x, origin.y, origin.size, origin.size);
+  ctx.clip();
+  ctx.lineCap = "square";
+  ctx.lineJoin = "miter";
+
+  for (const item of items) {
+    const selected = item.id === state.selectedId;
+    ctx.strokeStyle = selected
+      ? item.type === "rect" ? state.settings.rectSelected : state.settings.distanceSelected
+      : item.type === "rect" ? state.settings.rect : state.settings.distance;
+    ctx.fillStyle = ctx.strokeStyle;
+
+    if (item.type === "rect") {
+      const rect = normalizedRect(item);
+      const left = origin.x + (rect.x - imagePoint.x) * pixel;
+      const top = origin.y + (rect.y - imagePoint.y) * pixel;
+      const right = origin.x + (rect.x + rect.w - imagePoint.x) * pixel;
+      const bottom = origin.y + (rect.y + rect.h - imagePoint.y) * pixel;
+      ctx.setLineDash([]);
+      ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.rect(Math.round(left) + 0.5, Math.round(top) + 0.5, Math.round(right - left), Math.round(bottom - top));
+      ctx.stroke();
+    }
+
+    if (item.type === "distance") {
+      const a = {
+        x: origin.x + (item.a.x - imagePoint.x) * pixel,
+        y: origin.y + (item.a.y - imagePoint.y) * pixel,
+      };
+      const b = {
+        x: origin.x + (item.b.x - imagePoint.x) * pixel,
+        y: origin.y + (item.b.y - imagePoint.y) * pixel,
+      };
+      ctx.setLineDash(item.id === "draft" ? [pixel, pixel] : []);
+      ctx.lineWidth = pixel;
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
+      ctx.stroke();
+      ctx.setLineDash([]);
+      ctx.beginPath();
+      ctx.arc(a.x, a.y, pixel / 2, 0, Math.PI * 2);
+      ctx.arc(b.x, b.y, pixel / 2, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  ctx.restore();
+}
+
+function drawLoupeGuideOverlay(origin, imagePoint, pixel) {
+  const guide = loupeGuide();
+  if (!guide) return;
+  const position = guide.orientation === "vertical"
+    ? origin.x + (guide.value - imagePoint.x) * pixel
+    : origin.y + (guide.value - imagePoint.y) * pixel;
+  const crispPosition = Math.round(position) + 0.5;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(origin.x, origin.y, origin.size, origin.size);
+  ctx.clip();
+  ctx.setLineDash([]);
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = guide.id === state.selectedId ? state.settings.guideSelected : state.settings.guide;
+  ctx.beginPath();
+  if (guide.orientation === "vertical") {
+    ctx.moveTo(crispPosition, origin.y);
+    ctx.lineTo(crispPosition, origin.y + origin.size);
+  } else {
+    ctx.moveTo(origin.x, crispPosition);
+    ctx.lineTo(origin.x + origin.size, crispPosition);
+  }
+  ctx.stroke();
+  ctx.restore();
+}
+
+function drawLoupeSmartGuideOverlay(origin, imagePoint, pixel) {
+  if (!state.smartGuides.length) return;
+
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(origin.x, origin.y, origin.size, origin.size);
+  ctx.clip();
+  ctx.setLineDash([4, 3]);
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = state.settings.guideSelected;
+
+  for (const guide of state.smartGuides) {
+    const position = guide.orientation === "vertical"
+      ? origin.x + (guide.value - imagePoint.x) * pixel
+      : origin.y + (guide.value - imagePoint.y) * pixel;
+    const crispPosition = Math.round(position) + 0.5;
+    ctx.beginPath();
+    if (guide.orientation === "vertical") {
+      ctx.moveTo(crispPosition, origin.y);
+      ctx.lineTo(crispPosition, origin.y + origin.size);
+    } else {
+      ctx.moveTo(origin.x, crispPosition);
+      ctx.lineTo(origin.x + origin.size, crispPosition);
+    }
+    ctx.stroke();
+  }
+
+  ctx.restore();
+}
+
 function drawLoupe(screenPoint) {
-  if (state.tool !== "eyedropper" || !state.image || !state.hoverImage) return;
-  const sourceSize = 17;
+  if (!shouldShowLoupe()) return;
+  const sourceSize = state.settings.loupeFrameSize;
   const pixel = 9;
   const radius = sourceSize * pixel;
-  const imagePoint = {
-    x: Math.floor(state.hoverImage.x) - Math.floor(sourceSize / 2),
-    y: Math.floor(state.hoverImage.y) - Math.floor(sourceSize / 2),
+  const rawLoupePoint = loupeFocusPoint();
+  const loupePoint = {
+    x: clamp(rawLoupePoint.x, 0, state.image.width - 1),
+    y: clamp(rawLoupePoint.y, 0, state.image.height - 1),
   };
-  const x = clamp(screenPoint.x + 18, 8, screenSize().width - radius - 8);
-  const y = clamp(screenPoint.y + 18, 8, screenSize().height - radius - 30);
+  const imagePoint = {
+    x: clamp(Math.floor(loupePoint.x) - Math.floor(sourceSize / 2), 0, Math.max(0, state.image.width - sourceSize)),
+    y: clamp(Math.floor(loupePoint.y) - Math.floor(sourceSize / 2), 0, Math.max(0, state.image.height - sourceSize)),
+  };
+  const x = Math.round(clamp(screenPoint.x + 18, 8, screenSize().width - radius - 8));
+  const y = Math.round(clamp(screenPoint.y + 18, 8, screenSize().height - radius - 30));
+  const centerX = (Math.floor(loupePoint.x) - imagePoint.x) * pixel;
+  const centerY = (Math.floor(loupePoint.y) - imagePoint.y) * pixel;
+  const label = state.tool === "eyedropper"
+    ? state.currentColor?.hex ?? "-"
+    : loupeGuide()
+      ? `${loupeGuide().orientation === "vertical" ? "X" : "Y"} ${Math.round(loupeGuide().value)}`
+      : `X ${Math.round(loupePoint.x)} Y ${Math.round(loupePoint.y)}`;
 
   ctx.save();
   ctx.imageSmoothingEnabled = false;
@@ -1103,13 +1583,17 @@ function drawLoupe(screenPoint) {
     ctx.lineTo(x + radius, y + i * pixel);
     ctx.stroke();
   }
-  ctx.strokeStyle = "#45d0a0";
-  const center = Math.floor(sourceSize / 2) * pixel;
-  ctx.lineWidth = 2;
-  ctx.strokeRect(x + center, y + center, pixel, pixel);
+  drawLoupeMeasurementOverlay({ x, y, size: radius }, imagePoint, pixel);
+  drawLoupeSmartGuideOverlay({ x, y, size: radius }, imagePoint, pixel);
+  drawLoupeGuideOverlay({ x, y, size: radius }, imagePoint, pixel);
+  if (state.drag?.type !== "guide") {
+    ctx.strokeStyle = state.tool === "distance" ? state.settings.distanceSelected : state.settings.rectSelected;
+    ctx.lineWidth = 2;
+    ctx.strokeRect(x + centerX, y + centerY, pixel, pixel);
+  }
   ctx.fillStyle = "#f5f7fa";
   ctx.font = "12px ui-sans-serif, system-ui, sans-serif";
-  ctx.fillText(state.currentColor?.hex ?? "-", x + 6, y + radius + 16);
+  ctx.fillText(label, x + 6, y + radius + 16);
   ctx.restore();
 }
 
@@ -1120,7 +1604,9 @@ function render() {
   drawMeasurements();
   drawRulers();
   drawGuides();
+  drawSmartGuides();
   drawSwatches();
+  drawCopyToast();
   if (state.hoverScreen) drawLoupe(state.hoverScreen);
 }
 
@@ -1129,6 +1615,7 @@ function pointerDown(event) {
   canvas.setPointerCapture(event.pointerId);
   const screenPoint = eventPoint(event);
   const imagePoint = toImagePoint(screenPoint);
+  const dragPoint = snapPointToPixel(imagePoint);
 
   if (state.spacePressed || event.button === 1) {
     state.drag = { type: "pan", start: screenPoint, viewport: { ...state.viewport } };
@@ -1160,7 +1647,7 @@ function pointerDown(event) {
       item: selectedHandle.item,
       handle: selectedHandle.handle,
       cursor: selectedHandle.cursor,
-      start: imagePoint,
+      start: dragPoint,
       original: structuredClone(selectedHandle.item),
     };
     render();
@@ -1177,7 +1664,7 @@ function pointerDown(event) {
       type: "measurement",
       item: selectedBody.item,
       cursor: selectedBody.cursor,
-      start: imagePoint,
+      start: dragPoint,
       original: structuredClone(selectedBody.item),
     };
     render();
@@ -1191,7 +1678,7 @@ function pointerDown(event) {
       id: uid(),
       type: "guide",
       orientation: ruler.orientation,
-      value: ruler.orientation === "vertical" ? imagePoint.x : imagePoint.y,
+      value: snapGuideValue(ruler.orientation === "vertical" ? imagePoint.x : imagePoint.y),
     };
     state.guides.push(guide);
     state.selectedId = guide.id;
@@ -1219,13 +1706,13 @@ function pointerDown(event) {
   }
 
   if (state.tool === "rect" && imageBoundsContain(imagePoint)) {
-    const snappedPoint = snapPointToGuides(imagePoint);
+    const snappedPoint = snapMeasurementPoint(imagePoint);
     state.draft = { id: "draft", type: "rect", x: snappedPoint.x, y: snappedPoint.y, w: 0, h: 0 };
     state.drag = { type: "drawRect", start: snappedPoint };
   }
 
   if (state.tool === "distance" && imageBoundsContain(imagePoint)) {
-    const snappedPoint = snapPointToGuides(imagePoint);
+    const snappedPoint = snapMeasurementPoint(imagePoint);
     if (!state.draft) {
       state.draft = { id: "draft", type: "distance", a: snappedPoint, b: snappedPoint };
     } else {
@@ -1253,8 +1740,20 @@ function pointerDown(event) {
 function pointerMove(event) {
   const screenPoint = eventPoint(event);
   const imagePoint = toImagePoint(screenPoint);
+  const dragPoint = snapPointToPixel(imagePoint);
   state.hoverScreen = screenPoint;
   state.hoverImage = imagePoint;
+  state.smartGuides = [];
+  state.hoverSnapPoint = null;
+  if (
+    state.settings.smartGuides &&
+    !state.drag &&
+    !state.draft &&
+    (state.tool === "rect" || state.tool === "distance") &&
+    imageBoundsContain(imagePoint)
+  ) {
+    state.hoverSnapPoint = snapMeasurementPoint(imagePoint, { collectSmartGuides: true });
+  }
   updateCanvasCursor(screenPoint);
   if (state.tool === "eyedropper") {
     state.currentColor = getPixelColor(imagePoint);
@@ -1266,26 +1765,38 @@ function pointerMove(event) {
   }
 
   if (state.drag?.type === "drawRect" && state.draft) {
-    const snappedPoint = snapPointToGuides(imagePoint);
+    const snappedPoint = snapMeasurementPoint(imagePoint, { collectSmartGuides: true });
+    state.hoverSnapPoint = snappedPoint;
     state.draft.w = snappedPoint.x - state.drag.start.x;
     state.draft.h = snappedPoint.y - state.drag.start.y;
   }
 
   if (state.draft?.type === "distance") {
-    const snappedPoint = snapPointToGuides(imagePoint);
+    const snappedPoint = snapMeasurementPoint(imagePoint, { collectSmartGuides: true });
+    state.hoverSnapPoint = snappedPoint;
     state.draft.b = event.shiftKey ? snapDistanceEnd(state.draft.a, snappedPoint) : snappedPoint;
   }
 
   if (state.drag?.type === "measurement") {
-    const dx = imagePoint.x - state.drag.start.x;
-    const dy = imagePoint.y - state.drag.start.y;
+    const dx = dragPoint.x - state.drag.start.x;
+    const dy = dragPoint.y - state.drag.start.y;
     const item = state.drag.item;
     if (item.type === "rect") {
-      const snappedDelta = snapMovedRect(state.drag.original, dx, dy);
+      const snappedDelta = snapMovedRect(state.drag.original, dx, dy, {
+        excludeIds: new Set([item.id]),
+        collectSmartGuides: true,
+      });
       item.x = state.drag.original.x + snappedDelta.dx;
       item.y = state.drag.original.y + snappedDelta.dy;
+      if (state.pixelPerfectMode) {
+        item.x = Math.round(item.x);
+        item.y = Math.round(item.y);
+      }
     } else {
-      const a = snapPointToGuides({ x: state.drag.original.a.x + dx, y: state.drag.original.a.y + dy });
+      const a = snapMeasurementPoint(
+        { x: state.drag.original.a.x + dx, y: state.drag.original.a.y + dy },
+        { excludeIds: new Set([item.id]), collectSmartGuides: true },
+      );
       const snappedDx = a.x - state.drag.original.a.x;
       const snappedDy = a.y - state.drag.original.a.y;
       item.a = { x: state.drag.original.a.x + snappedDx, y: state.drag.original.a.y + snappedDy };
@@ -1294,19 +1805,24 @@ function pointerMove(event) {
   }
 
   if (state.drag?.type === "rectHandle") {
-    applyRectHandle(state.drag.item, state.drag.handle, state.drag.original, snapPointToGuides(imagePoint));
+    applyRectHandle(
+      state.drag.item,
+      state.drag.handle,
+      state.drag.original,
+      snapMeasurementPoint(imagePoint, { excludeIds: new Set([state.drag.item.id]), collectSmartGuides: true }),
+    );
   }
 
   if (state.drag?.type === "distanceHandle") {
     const item = state.drag.item;
     const other = state.drag.handle === "a" ? item.b : item.a;
-    const snappedPoint = snapPointToGuides(imagePoint);
+    const snappedPoint = snapMeasurementPoint(imagePoint, { excludeIds: new Set([item.id]), collectSmartGuides: true });
     item[state.drag.handle] = event.shiftKey ? snapDistanceEnd(other, snappedPoint) : snappedPoint;
   }
 
   if (state.drag?.type === "guide") {
     const guide = state.drag.item;
-    guide.value = guide.orientation === "vertical" ? imagePoint.x : imagePoint.y;
+    guide.value = snapGuideValue(guide.orientation === "vertical" ? imagePoint.x : imagePoint.y);
   }
 
   updateStatus();
@@ -1339,6 +1855,8 @@ function pointerUp() {
     persist();
   }
   state.drag = null;
+  state.smartGuides = [];
+  state.hoverSnapPoint = null;
   if (endingDrag) updateCanvasCursor(state.hoverScreen ?? { x: 0, y: 0 });
   render();
 }
@@ -1370,6 +1888,10 @@ function keyDown(event) {
     event.preventDefault();
     setActualZoom();
   } else if (event.key === "Escape") {
+    if (!elements.settingsPanel.hidden) {
+      setSettingsPanelOpen(false);
+      return;
+    }
     cancelAction();
   } else if (event.key === "Delete" || event.key === "Backspace") {
     deleteSelected();
@@ -1414,6 +1936,26 @@ elements.clearMeasurements.addEventListener("click", () => {
 elements.exportJson.addEventListener("click", exportMeasurements);
 elements.importJson.addEventListener("click", () => elements.jsonInput.click());
 elements.jsonInput.addEventListener("change", (event) => importMeasurements(event.target.files?.[0]));
+elements.settingsButton.addEventListener("click", (event) => {
+  event.stopPropagation();
+  setSettingsPanelOpen(elements.settingsPanel.hidden);
+});
+elements.settingsPanel.addEventListener("click", (event) => event.stopPropagation());
+elements.colorSettings.forEach((input) => {
+  input.addEventListener("input", () => {
+    const key = input.dataset.colorSetting;
+    if (!key || !isHexColor(input.value)) return;
+    writeSettings({ ...state.settings, [key]: input.value.toUpperCase() });
+  });
+});
+elements.loupeFrameSize.addEventListener("input", () => {
+  const loupeFrameSize = clamp(Number(elements.loupeFrameSize.value), 17, 37);
+  writeSettings({ ...state.settings, loupeFrameSize });
+});
+elements.smartGuides.addEventListener("change", () => {
+  writeSettings({ ...state.settings, smartGuides: elements.smartGuides.checked });
+});
+elements.resetSettings.addEventListener("click", () => writeSettings(DEFAULT_SETTINGS));
 elements.recentProjectList.addEventListener("click", (event) => {
   const target = event.target instanceof Element ? event.target : null;
   const button = target?.closest(".recent-project");
@@ -1428,6 +1970,11 @@ elements.theoryWidth.addEventListener("input", () => {
 });
 elements.snapToGuides.addEventListener("change", () => {
   state.snapToGuides = elements.snapToGuides.checked;
+  persist();
+  render();
+});
+elements.pixelPerfectMode.addEventListener("change", () => {
+  state.pixelPerfectMode = elements.pixelPerfectMode.checked;
   persist();
   render();
 });
@@ -1468,6 +2015,7 @@ canvas.addEventListener("wheel", wheel, { passive: false });
 window.addEventListener("keydown", keyDown);
 window.addEventListener("keyup", keyUp);
 window.addEventListener("resize", resizeCanvas);
+window.addEventListener("click", () => setSettingsPanelOpen(false));
 window.addEventListener("paste", (event) => {
   const imageItem = [...(event.clipboardData?.items ?? [])].find((item) => item.type.startsWith("image/"));
   const file = imageItem?.getAsFile();
@@ -1477,6 +2025,10 @@ window.addEventListener("paste", (event) => {
   loadImageBlob(file, `Pasted image ${new Date().toLocaleString("en-US")}.${extension}`);
 });
 
+state.settings = readSettings();
+syncSettingsControls();
+elements.snapToGuides.checked = state.snapToGuides;
+elements.pixelPerfectMode.checked = state.pixelPerfectMode;
 state.recentProjects = readRecentProjects();
 resizeCanvas();
 updateStatus();
