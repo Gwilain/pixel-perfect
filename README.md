@@ -47,11 +47,13 @@ http://127.0.0.1:4173/
 - `R`: Rectangle measurement
 - `D`: Distance measurement
 - `I`: Eyedropper
+- `Z`: Zoom
 - `Delete` / `Backspace`: Delete selected measurement, guide or color swatch
 - `Cmd/Ctrl + 0`: Fit to screen
 - `Cmd/Ctrl + 1`: Zoom 100%
 - `Esc`: Cancel current action
 - `Space + drag`: Pan
+- Zoom tool: click to zoom in, `Alt`+click to zoom out, drag right/left to zoom in/out
 - `Cmd/Ctrl/Alt + wheel`: Zoom around cursor
 
 ## Guides

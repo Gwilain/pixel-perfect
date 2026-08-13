@@ -28,13 +28,12 @@
         <button class="tool" type="button" data-tool="eyedropper" title="Eyedropper (I)" aria-label="Eyedropper">
           <img src="./images/eyedrop.svg" alt="" />
         </button>
+        <button class="tool" type="button" data-tool="zoom" title="Zoom (Z)" aria-label="Zoom">
+          <img src="./images/zoom.svg" alt="" />
+        </button>
       </div>
 
       <div class="group">
-        <button id="zoomOut" type="button" title="Zoom out around center">-</button>
-        <button id="zoomIn" type="button" title="Zoom in around center">+</button>
-        <button id="zoomActual" type="button" title="Zoom 100% (Cmd/Ctrl+1)">100%</button>
-        <button id="zoomFit" type="button" title="Fit to screen (Cmd/Ctrl+0)">Fit</button>
         <button id="clearMeasurements" type="button" title="Clear measurements and guides">Clear</button>
       </div>
 
@@ -115,10 +114,14 @@
 
     <footer class="statusbar">
       <span id="imageInfo">Image: -</span>
-      <span id="zoomInfo">Zoom: 100%</span>
+      <span class="zoom-control">
+        <button id="zoomOut" type="button" title="Zoom out around center">-</button>
+        <input id="zoomInfo" type="text" inputmode="numeric" aria-label="Zoom percentage" value="100%" />
+        <button id="zoomIn" type="button" title="Zoom in around center">+</button>
+      </span>
       <span id="cursorInfo">X: - Y: -</span>
       <button id="colorInfo" type="button" title="Copy HEX">Color: -</button>
-      <span id="hintInfo">Guides: drag from rulers | Space+drag: pan | Cmd/Ctrl/Alt+wheel: zoom | Esc: cancel</span>
+      <span id="hintInfo">Guides: drag from rulers | Z: zoom tool | Space+drag: pan | Cmd/Ctrl/Alt+wheel: zoom | Esc: cancel</span>
     </footer>
 
     <script defer src="./app.js"></script>

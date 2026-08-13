@@ -12,8 +12,6 @@ const elements = {
   toolButtons: [...document.querySelectorAll(".tool")],
   zoomOut: document.querySelector("#zoomOut"),
   zoomIn: document.querySelector("#zoomIn"),
-  zoomActual: document.querySelector("#zoomActual"),
-  zoomFit: document.querySelector("#zoomFit"),
   clearMeasurements: document.querySelector("#clearMeasurements"),
   exportJson: document.querySelector("#exportJson"),
   importJson: document.querySelector("#importJson"),
@@ -82,7 +80,7 @@ const smartRound = (value) => (Math.abs(value - Math.round(value)) < 0.05 ? Math
 const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 const isMac = navigator.platform.toLowerCase().includes("mac");
 const isHexColor = (value) => /^#[0-9a-f]{6}$/i.test(value);
-const RULER_SIZE = 18;
+const RULER_SIZE = 12;
 const HANDLE_SIZE = 8;
 const SWATCH_SIZE = 28;
 const SWATCH_GAP = 6;
@@ -233,6 +231,24 @@ function zoomAt(screenPoint, nextScale) {
     updateStatus();
     render();
   }
+}
+
+function zoomAroundCenter(nextScale) {
+  const size = screenSize();
+  zoomAt({ x: size.width / 2, y: size.height / 2 }, nextScale);
+}
+
+function applyZoomInput() {
+  if (!state.image) {
+    updateStatus();
+    return;
+  }
+  const value = Number(elements.zoomInfo.value.replace("%", "").trim());
+  if (!Number.isFinite(value) || value <= 0) {
+    updateStatus();
+    return;
+  }
+  zoomAroundCenter(value / 100);
 }
 
 function getScaleFactor() {
@@ -939,6 +955,10 @@ function updateCanvasCursor(screenPoint) {
     canvas.style.cursor = "ew-resize";
     return;
   }
+  if (state.tool === "zoom") {
+    canvas.style.cursor = "zoom-in";
+    return;
+  }
   const hit = state.tool === "select" || state.tool === "rect" || state.tool === "distance"
     ? hitSelectedHandle(screenPoint) ?? hitSelectedMeasurementBody(screenPoint) ?? (state.tool === "select" ? hitTest(screenPoint) : null)
     : null;
@@ -1008,7 +1028,9 @@ function updateStatus() {
   elements.imageInfo.textContent = state.image
     ? `Image: ${state.image.width} x ${state.image.height} px`
     : "Image: -";
-  elements.zoomInfo.textContent = `Zoom: ${Math.round(state.viewport.scale * 100)}%`;
+  if (document.activeElement !== elements.zoomInfo) {
+    elements.zoomInfo.value = `${Math.round(state.viewport.scale * 100)}%`;
+  }
   if (state.hoverImage && imageBoundsContain(state.hoverImage)) {
     elements.cursorInfo.textContent = `X: ${Math.floor(state.hoverImage.x)} Y: ${Math.floor(state.hoverImage.y)}`;
   } else {
@@ -1056,12 +1078,12 @@ function chooseTickStep() {
 function drawRulers() {
   const size = screenSize();
   ctx.save();
-  ctx.fillStyle = "#171a1f";
+  ctx.fillStyle = "rgba(23, 26, 31, 0.82)";
   ctx.fillRect(0, 0, size.width, RULER_SIZE);
   ctx.fillRect(0, 0, RULER_SIZE, size.height);
-  ctx.fillStyle = "#20242a";
+  ctx.fillStyle = "rgba(32, 36, 42, 0.82)";
   ctx.fillRect(0, 0, RULER_SIZE, RULER_SIZE);
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.18)";
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.12)";
   ctx.beginPath();
   ctx.moveTo(0, RULER_SIZE + 0.5);
   ctx.lineTo(size.width, RULER_SIZE + 0.5);
@@ -1079,18 +1101,18 @@ function drawRulers() {
   const endX = toImagePoint({ x: size.width, y: 0 }).x;
   const startY = Math.floor(toImagePoint({ x: 0, y: RULER_SIZE }).y / step) * step;
   const endY = toImagePoint({ x: 0, y: size.height }).y;
-  ctx.font = "9px ui-sans-serif, system-ui, sans-serif";
-  ctx.fillStyle = "#a5adb8";
-  ctx.strokeStyle = "rgba(232, 237, 242, 0.42)";
+  ctx.font = "8px ui-sans-serif, system-ui, sans-serif";
+  ctx.fillStyle = "rgba(165, 173, 184, 0.82)";
+  ctx.strokeStyle = "rgba(232, 237, 242, 0.28)";
 
   for (let x = startX; x <= endX; x += step) {
     const screenX = toScreenPoint({ x, y: 0 }).x;
     if (screenX < RULER_SIZE) continue;
     ctx.beginPath();
     ctx.moveTo(screenX + 0.5, RULER_SIZE);
-    ctx.lineTo(screenX + 0.5, x % (step * 2) === 0 ? 5 : 10);
+    ctx.lineTo(screenX + 0.5, x % (step * 2) === 0 ? 4 : 7);
     ctx.stroke();
-    ctx.fillText(String(Math.round(x)), screenX + 3, 8);
+    if (x % (step * 2) === 0) ctx.fillText(String(Math.round(x)), screenX + 3, 7);
   }
 
   for (let y = startY; y <= endY; y += step) {
@@ -1098,10 +1120,11 @@ function drawRulers() {
     if (screenY < RULER_SIZE) continue;
     ctx.beginPath();
     ctx.moveTo(RULER_SIZE, screenY + 0.5);
-    ctx.lineTo(y % (step * 2) === 0 ? 5 : 10, screenY + 0.5);
+    ctx.lineTo(y % (step * 2) === 0 ? 4 : 7, screenY + 0.5);
     ctx.stroke();
+    if (y % (step * 2) !== 0) continue;
     ctx.save();
-    ctx.translate(7, screenY - 3);
+    ctx.translate(6, screenY - 3);
     ctx.rotate(-Math.PI / 2);
     ctx.fillText(String(Math.round(y)), 0, 0);
     ctx.restore();
@@ -1622,6 +1645,19 @@ function pointerDown(event) {
     return;
   }
 
+  if (state.tool === "zoom") {
+    state.drag = {
+      type: "zoom",
+      start: screenPoint,
+      anchor: screenPoint,
+      scale: state.viewport.scale,
+      alt: event.altKey,
+      moved: false,
+    };
+    canvas.style.cursor = event.altKey ? "zoom-out" : "zoom-in";
+    return;
+  }
+
   const swatch = swatchHit(screenPoint);
   if (swatch) {
     state.selectedId = swatch.item.id;
@@ -1764,6 +1800,13 @@ function pointerMove(event) {
     state.viewport.y = state.drag.viewport.y + screenPoint.y - state.drag.start.y;
   }
 
+  if (state.drag?.type === "zoom") {
+    const dx = screenPoint.x - state.drag.start.x;
+    if (Math.abs(dx) > 2) state.drag.moved = true;
+    const direction = state.drag.alt ? -1 : 1;
+    zoomAt(state.drag.anchor, state.drag.scale * Math.exp(dx * 0.012 * direction));
+  }
+
   if (state.drag?.type === "drawRect" && state.draft) {
     const snappedPoint = snapMeasurementPoint(imagePoint, { collectSmartGuides: true });
     state.hoverSnapPoint = snappedPoint;
@@ -1831,6 +1874,9 @@ function pointerMove(event) {
 
 function pointerUp() {
   const endingDrag = state.drag;
+  if (state.drag?.type === "zoom" && !state.drag.moved) {
+    zoomAt(state.drag.anchor, state.viewport.scale * (state.drag.alt ? 0.8 : 1.25));
+  }
   if (state.drag?.type === "drawRect" && state.draft) {
     const rect = normalizedRect(state.draft);
     if (rect.w >= 1 || rect.h >= 1) {
@@ -1896,7 +1942,7 @@ function keyDown(event) {
   } else if (event.key === "Delete" || event.key === "Backspace") {
     deleteSelected();
   } else if (!event.metaKey && !event.ctrlKey && !event.altKey) {
-    const keyMap = { v: "select", r: "rect", d: "distance", i: "eyedropper" };
+    const keyMap = { v: "select", r: "rect", d: "distance", i: "eyedropper", z: "zoom" };
     const nextTool = keyMap[event.key.toLowerCase()];
     if (nextTool) setTool(nextTool);
   }
@@ -1912,16 +1958,15 @@ function keyUp(event) {
 elements.openButton.addEventListener("click", () => elements.fileInput.click());
 elements.fileInput.addEventListener("change", (event) => loadImageFile(event.target.files?.[0]));
 elements.toolButtons.forEach((button) => button.addEventListener("click", () => setTool(button.dataset.tool)));
-elements.zoomOut.addEventListener("click", () => {
-  const size = screenSize();
-  zoomAt({ x: size.width / 2, y: size.height / 2 }, state.viewport.scale / 1.25);
+elements.zoomOut.addEventListener("click", () => zoomAroundCenter(state.viewport.scale / 1.25));
+elements.zoomIn.addEventListener("click", () => zoomAroundCenter(state.viewport.scale * 1.25));
+elements.zoomInfo.addEventListener("change", applyZoomInput);
+elements.zoomInfo.addEventListener("keydown", (event) => {
+  if (event.key !== "Enter") return;
+  event.preventDefault();
+  applyZoomInput();
+  elements.zoomInfo.blur();
 });
-elements.zoomIn.addEventListener("click", () => {
-  const size = screenSize();
-  zoomAt({ x: size.width / 2, y: size.height / 2 }, state.viewport.scale * 1.25);
-});
-elements.zoomActual.addEventListener("click", setActualZoom);
-elements.zoomFit.addEventListener("click", fitToScreen);
 elements.clearMeasurements.addEventListener("click", () => {
   state.measurements = [];
   state.guides = [];
