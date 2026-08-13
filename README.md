@@ -7,9 +7,13 @@ It is built as a static app with plain HTML, CSS and JavaScript. There is no bac
 ## Features
 
 - Open an image from disk.
+- Start a new empty project without reloading the app.
 - Drag and drop an image into the viewport.
 - Paste an image from the clipboard with `Cmd+V` / `Ctrl+V`.
+- Capture a browser tab or window through the browser screen picker.
+- Crop a captured or imported image before measuring.
 - Zoom, pan and inspect pixels at high scale.
+- Scale measurements from a theoretical width or height while preserving the image ratio.
 - Measure rectangles with width, height and image coordinates.
 - Measure distances with horizontal, vertical and total distance.
 - Edit existing rectangles with handles.
@@ -48,12 +52,17 @@ http://127.0.0.1:4173/
 - `D`: Distance measurement
 - `I`: Eyedropper
 - `Z`: Zoom
+- `C`: Crop
+- `Enter`: Apply current crop
+- `Cmd/Ctrl + Z`: Undo recent drawing, crop, guide, swatch, import, clear or image replacement actions
 - `Delete` / `Backspace`: Delete selected measurement, guide or color swatch
 - `Cmd/Ctrl + 0`: Fit to screen
 - `Cmd/Ctrl + 1`: Zoom 100%
 - `Esc`: Cancel current action
 - `Space + drag`: Pan
 - Zoom tool: click to zoom in, `Alt`+click to zoom out, drag right/left to zoom in/out
+- Crop tool: `Alt`+drag a handle to resize from center
+- Rectangle and crop tools: hold `Shift` to constrain proportions
 - `Cmd/Ctrl/Alt + wheel`: Zoom around cursor
 
 ## Guides

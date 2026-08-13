@@ -8,14 +8,18 @@ const elements = {
   recentProjectList: document.querySelector("#recentProjectList"),
   fileInput: document.querySelector("#fileInput"),
   jsonInput: document.querySelector("#jsonInput"),
+  newButton: document.querySelector("#newButton"),
   openButton: document.querySelector("#openButton"),
+  captureButton: document.querySelector("#captureButton"),
   toolButtons: [...document.querySelectorAll(".tool")],
   zoomOut: document.querySelector("#zoomOut"),
   zoomIn: document.querySelector("#zoomIn"),
   clearMeasurements: document.querySelector("#clearMeasurements"),
+  applyCrop: document.querySelector("#applyCrop"),
   exportJson: document.querySelector("#exportJson"),
   importJson: document.querySelector("#importJson"),
   theoryWidth: document.querySelector("#theoryWidth"),
+  theoryHeight: document.querySelector("#theoryHeight"),
   snapToGuides: document.querySelector("#snapToGuides"),
   pixelPerfectMode: document.querySelector("#pixelPerfectMode"),
   settingsButton: document.querySelector("#settingsButton"),
@@ -65,10 +69,12 @@ const state = {
   smartGuides: [],
   spacePressed: false,
   theoryWidth: null,
+  theoryHeight: null,
   snapToGuides: true,
   pixelPerfectMode: true,
   settings: { ...DEFAULT_SETTINGS },
   recentProjects: [],
+  crop: null,
 };
 
 state.imageCtx = state.imageCanvas.getContext("2d", { willReadFrequently: true });
@@ -89,6 +95,8 @@ const SETTINGS_KEY = "pixel-perfect:settings";
 const RECENT_PROJECTS_KEY = "pixel-perfect:recent-projects";
 const DB_NAME = "pixel-perfect-db";
 const DB_VERSION = 1;
+const UNDO_LIMIT = 40;
+const undoStack = [];
 
 function colorAlpha(hex, alpha) {
   if (!isHexColor(hex)) return `rgba(244, 201, 93, ${alpha})`;
@@ -126,6 +134,60 @@ function writeSettings(settings) {
   localStorage.setItem(SETTINGS_KEY, JSON.stringify(state.settings));
   syncSettingsControls();
   render();
+}
+
+function cloneStateValue(value) {
+  return value == null ? value : structuredClone(value);
+}
+
+function createUndoSnapshot(imageBlob = null) {
+  return {
+    imageBlob,
+    imageName: state.imageName,
+    imageSignature: state.imageSignature,
+    measurements: cloneStateValue(state.measurements) ?? [],
+    guides: cloneStateValue(state.guides) ?? [],
+    swatches: cloneStateValue(state.swatches) ?? [],
+    crop: cloneStateValue(state.crop),
+    selectedId: state.selectedId,
+    currentColor: cloneStateValue(state.currentColor),
+    viewport: { ...state.viewport },
+    theoryWidth: state.theoryWidth,
+    theoryHeight: state.theoryHeight,
+    snapToGuides: state.snapToGuides,
+    pixelPerfectMode: state.pixelPerfectMode,
+  };
+}
+
+function pushUndoSnapshot(snapshot) {
+  undoStack.push(snapshot);
+  if (undoStack.length > UNDO_LIMIT) undoStack.shift();
+}
+
+function pushUndo() {
+  pushUndoSnapshot(createUndoSnapshot());
+}
+
+function pushExistingUndo(snapshot) {
+  if (snapshot) pushUndoSnapshot(snapshot);
+}
+
+function hasChanged(before, after) {
+  return JSON.stringify(before) !== JSON.stringify(after);
+}
+
+function canvasToBlob(canvas) {
+  return new Promise((resolve) => canvas.toBlob(resolve, "image/png"));
+}
+
+async function pushUndoWithImage() {
+  const imageBlob = state.image ? await canvasToBlob(state.imageCanvas) : null;
+  if (state.image && !imageBlob) return;
+  pushUndoSnapshot(createUndoSnapshot(imageBlob));
+}
+
+async function pushUndoBeforeImageChange() {
+  if (state.image) await pushUndoWithImage();
 }
 
 function syncSettingsControls() {
@@ -182,17 +244,51 @@ function imageBoundsContain(point) {
   );
 }
 
+function syncToolButtons() {
+  elements.toolButtons.forEach((button) => {
+    button.classList.toggle("is-active", button.dataset.tool === state.tool);
+  });
+}
+
 function setTool(tool) {
+  const previousTool = state.tool;
   state.tool = tool;
   state.draft = null;
   state.drag = null;
   state.smartGuides = [];
   state.hoverSnapPoint = null;
-  elements.toolButtons.forEach((button) => {
-    button.classList.toggle("is-active", button.dataset.tool === tool);
-  });
+  if (previousTool === "crop" && tool !== "crop" && state.selectedId === state.crop?.id) {
+    state.selectedId = null;
+  }
+  if (tool === "crop") {
+    ensureCrop();
+    if (state.crop) state.selectedId = state.crop.id;
+  }
+  syncToolButtons();
   if (state.hoverScreen) updateCanvasCursor(state.hoverScreen);
   render();
+}
+
+function ensureCrop() {
+  if (!state.image || state.crop) return;
+  state.crop = {
+    id: "crop",
+    type: "rect",
+    x: 0,
+    y: 0,
+    w: state.image.width,
+    h: state.image.height,
+  };
+}
+
+function normalizedCrop(rect) {
+  if (!state.image || !rect) return null;
+  const crop = normalizedRect(rect);
+  const x = clamp(Math.round(crop.x), 0, state.image.width - 1);
+  const y = clamp(Math.round(crop.y), 0, state.image.height - 1);
+  const w = clamp(Math.round(crop.w), 1, state.image.width - x);
+  const h = clamp(Math.round(crop.h), 1, state.image.height - y);
+  return { id: "crop", type: "rect", x, y, w, h };
 }
 
 function fitToScreen() {
@@ -253,8 +349,29 @@ function applyZoomInput() {
 }
 
 function getScaleFactor() {
-  if (!state.theoryWidth || !state.image) return 1;
-  return state.theoryWidth / state.image.width;
+  if (!state.image) return 1;
+  if (state.theoryWidth) return state.theoryWidth / state.image.width;
+  if (state.theoryHeight) return state.theoryHeight / state.image.height;
+  return 1;
+}
+
+function syncTheoryInputs(source = null) {
+  if (!state.image) {
+    elements.theoryWidth.value = state.theoryWidth ?? "";
+    elements.theoryHeight.value = state.theoryHeight ?? "";
+    return;
+  }
+
+  if (source === "height" && state.theoryHeight) {
+    state.theoryWidth = state.theoryHeight * state.image.width / state.image.height;
+  } else if (state.theoryWidth) {
+    state.theoryHeight = state.theoryWidth * state.image.height / state.image.width;
+  } else if (state.theoryHeight) {
+    state.theoryWidth = state.theoryHeight * state.image.width / state.image.height;
+  }
+
+  elements.theoryWidth.value = state.theoryWidth ? smartRound(state.theoryWidth) : "";
+  elements.theoryHeight.value = state.theoryHeight ? smartRound(state.theoryHeight) : "";
 }
 
 function formatMeasureValue(value) {
@@ -266,9 +383,83 @@ function formatCoord(value) {
   return smartRound(value * getScaleFactor());
 }
 
+function resetProject() {
+  state.image = null;
+  state.imageName = "";
+  state.imageSignature = "";
+  state.imageData = null;
+  state.measurements = [];
+  state.guides = [];
+  state.swatches = [];
+  state.selectedId = null;
+  state.hoverImage = null;
+  state.hoverSnapPoint = null;
+  state.currentColor = null;
+  state.copyToast = null;
+  state.draft = null;
+  state.drag = null;
+  state.smartGuides = [];
+  state.crop = null;
+  state.viewport = { scale: 1, x: 0, y: 0 };
+  state.theoryWidth = null;
+  state.theoryHeight = null;
+  syncTheoryInputs();
+  elements.emptyState.hidden = false;
+  renderRecentProjects();
+  updateStatus();
+  render();
+}
+
+async function undo() {
+  const snapshot = undoStack.pop();
+  if (!snapshot) return;
+
+  if (snapshot.imageBlob) {
+    await loadImageBlob(snapshot.imageBlob, snapshot.imageName || "Restored image.png", {
+      saveRecent: false,
+      restoreStored: false,
+    });
+    state.imageName = snapshot.imageName;
+    state.imageSignature = snapshot.imageSignature;
+  }
+
+  state.measurements = cloneStateValue(snapshot.measurements) ?? [];
+  state.guides = cloneStateValue(snapshot.guides) ?? [];
+  state.swatches = cloneStateValue(snapshot.swatches) ?? [];
+  state.crop = cloneStateValue(snapshot.crop);
+  state.selectedId = snapshot.selectedId;
+  state.currentColor = cloneStateValue(snapshot.currentColor);
+  state.viewport = snapshot.viewport ? { ...snapshot.viewport } : state.viewport;
+  state.theoryWidth = snapshot.theoryWidth;
+  state.theoryHeight = snapshot.theoryHeight;
+  state.snapToGuides = snapshot.snapToGuides;
+  state.pixelPerfectMode = snapshot.pixelPerfectMode;
+  state.draft = null;
+  state.drag = null;
+  state.smartGuides = [];
+  state.hoverSnapPoint = null;
+  elements.snapToGuides.checked = state.snapToGuides;
+  elements.pixelPerfectMode.checked = state.pixelPerfectMode;
+  syncTheoryInputs(snapshot.theoryHeight && !snapshot.theoryWidth ? "height" : "width");
+  syncToolButtons();
+  persist();
+  updateStatus();
+  render();
+}
+
 async function loadImageFile(file) {
   if (!file || !file.type.startsWith("image/")) return;
+  await pushUndoBeforeImageChange();
   await loadImageBlob(file, file.name || "Untitled image");
+}
+
+function droppedImageFile(dataTransfer) {
+  const files = [...(dataTransfer?.files ?? [])];
+  return files.find((file) => file.type.startsWith("image/")) ?? null;
+}
+
+function hasFileDrop(dataTransfer) {
+  return [...(dataTransfer?.types ?? [])].includes("Files");
 }
 
 async function loadImageBlob(blob, name, options = {}) {
@@ -285,12 +476,16 @@ async function loadImageBlob(blob, name, options = {}) {
   state.measurements = [];
   state.guides = [];
   state.swatches = [];
+  state.crop = null;
+  state.theoryWidth = null;
+  state.theoryHeight = null;
   state.snapToGuides = true;
   state.pixelPerfectMode = true;
   elements.snapToGuides.checked = state.snapToGuides;
   elements.pixelPerfectMode.checked = state.pixelPerfectMode;
   state.selectedId = null;
-  restoreFromStorage();
+  if (options.restoreStored !== false) restoreFromStorage();
+  syncTheoryInputs();
   elements.emptyState.hidden = true;
   renderRecentProjects();
   fitToScreen();
@@ -298,6 +493,59 @@ async function loadImageBlob(blob, name, options = {}) {
     await saveRecentProject(blob, name, bitmap.width, bitmap.height);
   }
   updateStatus();
+}
+
+async function captureScreen() {
+  if (!navigator.mediaDevices?.getDisplayMedia) {
+    elements.hintInfo.textContent = "Screen capture is unavailable here. Use a system screenshot, then paste it.";
+    return;
+  }
+
+  let stream = null;
+  try {
+    stream = await navigator.mediaDevices.getDisplayMedia({
+      video: { cursor: "never", displaySurface: "browser" },
+      audio: false,
+    });
+    const video = document.createElement("video");
+    video.srcObject = stream;
+    video.muted = true;
+    await video.play();
+    await new Promise((resolve) => {
+      if (video.readyState >= 2) resolve();
+      else video.onloadeddata = resolve;
+    });
+
+    const snapshotCanvas = document.createElement("canvas");
+    snapshotCanvas.width = video.videoWidth;
+    snapshotCanvas.height = video.videoHeight;
+    snapshotCanvas.getContext("2d").drawImage(video, 0, 0);
+    const blob = await new Promise((resolve) => snapshotCanvas.toBlob(resolve, "image/png"));
+    if (!blob) throw new Error("Snapshot failed");
+    await pushUndoBeforeImageChange();
+    await loadImageBlob(blob, `Capture ${new Date().toLocaleString("en-US")}.png`);
+  } catch (error) {
+    if (error.name !== "NotAllowedError") {
+      elements.hintInfo.textContent = "Snapshot failed. Use a system screenshot, then paste it.";
+    }
+  } finally {
+    stream?.getTracks().forEach((track) => track.stop());
+  }
+}
+
+async function applyCrop() {
+  if (!state.image || !state.crop) return;
+  const rect = normalizedCrop(state.crop);
+  if (!rect) return;
+  await pushUndoWithImage();
+  const cropCanvas = document.createElement("canvas");
+  cropCanvas.width = rect.w;
+  cropCanvas.height = rect.h;
+  cropCanvas.getContext("2d").drawImage(state.imageCanvas, rect.x, rect.y, rect.w, rect.h, 0, 0, rect.w, rect.h);
+  const blob = await new Promise((resolve) => cropCanvas.toBlob(resolve, "image/png"));
+  if (!blob) return;
+  state.crop = null;
+  await loadImageBlob(blob, `Cropped ${state.imageName || "image"}.png`);
 }
 
 function openProjectDatabase() {
@@ -381,6 +629,7 @@ async function reopenRecentProject(id) {
     writeRecentProjects(state.recentProjects.filter((project) => project.id !== id));
     return;
   }
+  await pushUndoBeforeImageChange();
   await loadImageBlob(record.blob, record.name, { saveRecent: true });
 }
 
@@ -396,10 +645,12 @@ function renderRecentProjects() {
     button.className = "recent-project";
     button.title = `Open ${project.name}`;
     button.dataset.projectId = project.id;
+    button.draggable = false;
 
     const image = document.createElement("img");
     image.src = project.thumbnail;
     image.alt = "";
+    image.draggable = false;
 
     const label = document.createElement("span");
     label.textContent = `${project.name} (${project.width} x ${project.height})`;
@@ -437,6 +688,50 @@ function normalizedRect(rect) {
     w: Math.abs(rect.w),
     h: Math.abs(rect.h),
   };
+}
+
+function constrainDrawRect(start, end) {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const size = Math.max(Math.abs(dx), Math.abs(dy));
+  return {
+    w: Math.sign(dx || 1) * size,
+    h: Math.sign(dy || 1) * size,
+  };
+}
+
+function constrainRectToRatio(left, top, right, bottom, original, handle, fromCenter) {
+  const originalRect = normalizedRect(original);
+  if (!originalRect.w || !originalRect.h) return { left, top, right, bottom };
+
+  const ratio = originalRect.w / originalRect.h;
+  let width = Math.max(0, right - left);
+  let height = Math.max(0, bottom - top);
+
+  if (handle.includes("w") || handle.includes("e")) {
+    height = width / ratio;
+  } else {
+    width = height * ratio;
+  }
+
+  if (fromCenter) {
+    const centerX = originalRect.x + originalRect.w / 2;
+    const centerY = originalRect.y + originalRect.h / 2;
+    return {
+      left: centerX - width / 2,
+      right: centerX + width / 2,
+      top: centerY - height / 2,
+      bottom: centerY + height / 2,
+    };
+  }
+
+  if (handle.includes("w")) left = right - width;
+  else right = left + width;
+
+  if (handle.includes("n")) top = bottom - height;
+  else bottom = top + height;
+
+  return { left, top, right, bottom };
 }
 
 function snapDistanceEnd(start, end) {
@@ -607,6 +902,7 @@ function persist() {
     !state.guides.length &&
     !state.swatches.length &&
     !state.theoryWidth &&
+    !state.theoryHeight &&
     !state.snapToGuides &&
     !state.pixelPerfectMode
   ) {
@@ -617,6 +913,7 @@ function persist() {
     version: 1,
     imageSignature: state.imageSignature,
     theoryWidth: state.theoryWidth,
+    theoryHeight: state.theoryHeight,
     snapToGuides: state.snapToGuides,
     pixelPerfectMode: state.pixelPerfectMode,
     measurements: state.measurements,
@@ -636,9 +933,10 @@ function restoreFromStorage() {
     state.guides = Array.isArray(payload.guides) ? payload.guides : [];
     state.swatches = Array.isArray(payload.swatches) ? payload.swatches : [];
     state.theoryWidth = Number.isFinite(payload.theoryWidth) ? payload.theoryWidth : null;
+    state.theoryHeight = Number.isFinite(payload.theoryHeight) ? payload.theoryHeight : null;
     state.snapToGuides = typeof payload.snapToGuides === "boolean" ? payload.snapToGuides : true;
     state.pixelPerfectMode = typeof payload.pixelPerfectMode === "boolean" ? payload.pixelPerfectMode : true;
-    elements.theoryWidth.value = state.theoryWidth ?? "";
+    syncTheoryInputs(state.theoryHeight && !state.theoryWidth ? "height" : "width");
     elements.snapToGuides.checked = state.snapToGuides;
     elements.pixelPerfectMode.checked = state.pixelPerfectMode;
   } catch {
@@ -656,6 +954,7 @@ function exportMeasurements() {
       signature: state.imageSignature,
     },
     theoryWidth: state.theoryWidth,
+    theoryHeight: state.theoryHeight,
     snapToGuides: state.snapToGuides,
     pixelPerfectMode: state.pixelPerfectMode,
     measurements: state.measurements,
@@ -673,13 +972,15 @@ function exportMeasurements() {
 async function importMeasurements(file) {
   if (!file) return;
   const payload = JSON.parse(await file.text());
+  pushUndo();
   state.measurements = Array.isArray(payload.measurements) ? payload.measurements : [];
   state.guides = Array.isArray(payload.guides) ? payload.guides : [];
   state.swatches = Array.isArray(payload.swatches) ? payload.swatches : [];
   state.theoryWidth = Number.isFinite(payload.theoryWidth) ? payload.theoryWidth : null;
+  state.theoryHeight = Number.isFinite(payload.theoryHeight) ? payload.theoryHeight : null;
   state.snapToGuides = typeof payload.snapToGuides === "boolean" ? payload.snapToGuides : true;
   state.pixelPerfectMode = typeof payload.pixelPerfectMode === "boolean" ? payload.pixelPerfectMode : true;
-  elements.theoryWidth.value = state.theoryWidth ?? "";
+  syncTheoryInputs(state.theoryHeight && !state.theoryWidth ? "height" : "width");
   elements.snapToGuides.checked = state.snapToGuides;
   elements.pixelPerfectMode.checked = state.pixelPerfectMode;
   state.selectedId = null;
@@ -690,6 +991,10 @@ async function importMeasurements(file) {
 
 function selectedMeasurement() {
   return state.measurements.find((item) => item.id === state.selectedId) ?? null;
+}
+
+function selectedCrop() {
+  return state.tool === "crop" && state.crop?.id === state.selectedId ? state.crop : null;
 }
 
 function rectHandlePoints(item) {
@@ -713,7 +1018,7 @@ function rectHandlePoints(item) {
 }
 
 function hitSelectedHandle(screenPoint) {
-  const item = selectedMeasurement();
+  const item = selectedMeasurement() ?? selectedCrop();
   if (!item) return null;
   const halfSize = HANDLE_SIZE / 2 + 3;
 
@@ -745,7 +1050,7 @@ function hitSelectedHandle(screenPoint) {
 }
 
 function hitSelectedMeasurementBody(screenPoint) {
-  const item = selectedMeasurement();
+  const item = selectedMeasurement() ?? selectedCrop();
   if (!item) return null;
   const imagePoint = toImagePoint(screenPoint);
   const tolerance = 8 / state.viewport.scale;
@@ -890,6 +1195,7 @@ function addSwatch(color, imagePoint) {
     render();
     return last;
   }
+  pushUndo();
   const swatch = {
     id: uid(),
     type: "swatch",
@@ -910,17 +1216,36 @@ function guideIsInsideImage(guide) {
   return guide.value >= 0 && guide.value <= (guide.orientation === "vertical" ? state.image.width : state.image.height);
 }
 
-function applyRectHandle(item, handle, original, imagePoint) {
+function applyRectHandle(item, handle, original, imagePoint, options = {}) {
   const rect = normalizedRect(original);
   let left = rect.x;
   let right = rect.x + rect.w;
   let top = rect.y;
   let bottom = rect.y + rect.h;
 
-  if (handle.includes("w")) left = imagePoint.x;
-  if (handle.includes("e")) right = imagePoint.x;
-  if (handle.includes("n")) top = imagePoint.y;
-  if (handle.includes("s")) bottom = imagePoint.y;
+  if (options.fromCenter) {
+    const centerX = rect.x + rect.w / 2;
+    const centerY = rect.y + rect.h / 2;
+    const halfWidth = handle.includes("w") || handle.includes("e")
+      ? Math.abs(imagePoint.x - centerX)
+      : rect.w / 2;
+    const halfHeight = handle.includes("n") || handle.includes("s")
+      ? Math.abs(imagePoint.y - centerY)
+      : rect.h / 2;
+    left = centerX - halfWidth;
+    right = centerX + halfWidth;
+    top = centerY - halfHeight;
+    bottom = centerY + halfHeight;
+  } else {
+    if (handle.includes("w")) left = imagePoint.x;
+    if (handle.includes("e")) right = imagePoint.x;
+    if (handle.includes("n")) top = imagePoint.y;
+    if (handle.includes("s")) bottom = imagePoint.y;
+  }
+
+  if (options.keepRatio) {
+    ({ left, top, right, bottom } = constrainRectToRatio(left, top, right, bottom, original, handle, options.fromCenter));
+  }
 
   const next = normalizedRect({ x: left, y: top, w: right - left, h: bottom - top });
   item.x = next.x;
@@ -960,7 +1285,7 @@ function updateCanvasCursor(screenPoint) {
     canvas.style.cursor = "zoom-in";
     return;
   }
-  const hit = state.tool === "select" || state.tool === "rect" || state.tool === "distance"
+  const hit = state.tool === "select" || state.tool === "rect" || state.tool === "distance" || state.tool === "crop"
     ? hitSelectedHandle(screenPoint) ?? hitSelectedMeasurementBody(screenPoint) ?? (state.tool === "select" ? hitTest(screenPoint) : null)
     : null;
   canvas.style.cursor = hit?.cursor ?? (hit ? "move" : state.tool === "select" ? "default" : "crosshair");
@@ -1009,9 +1334,11 @@ function hitTest(screenPoint) {
 
 function deleteSelected() {
   if (!state.selectedId) return;
+  pushUndo();
   state.measurements = state.measurements.filter((item) => item.id !== state.selectedId);
   state.guides = state.guides.filter((item) => item.id !== state.selectedId);
   state.swatches = state.swatches.filter((item) => item.id !== state.selectedId);
+  if (state.crop?.id === state.selectedId) state.crop = null;
   state.selectedId = null;
   persist();
   render();
@@ -1301,6 +1628,28 @@ function drawDistanceHandles(item) {
   ctx.restore();
 }
 
+function drawCropOverlay() {
+  if (state.tool !== "crop" || !state.crop) return;
+  const rect = normalizedRect(state.crop);
+  const topLeft = toScreenPoint({ x: rect.x, y: rect.y });
+  const bottomRight = toScreenPoint({ x: rect.x + rect.w, y: rect.y + rect.h });
+  const size = screenSize();
+
+  ctx.save();
+  ctx.fillStyle = "rgba(0, 0, 0, 0.36)";
+  ctx.beginPath();
+  ctx.rect(0, 0, size.width, size.height);
+  ctx.rect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
+  ctx.fill("evenodd");
+  ctx.lineWidth = 1.5;
+  ctx.strokeStyle = state.settings.rectSelected;
+  ctx.setLineDash([6, 4]);
+  ctx.strokeRect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
+  ctx.setLineDash([]);
+  drawRectHandles(state.crop);
+  ctx.restore();
+}
+
 function drawSwatches() {
   if (!state.swatches.length) return;
   const rects = swatchRects();
@@ -1424,7 +1773,7 @@ function shouldShowLoupe() {
   if (!state.image || !state.hoverImage) return false;
   if (state.tool === "eyedropper") return true;
   if (state.pixelPerfectMode && state.drag?.type === "guide") return true;
-  return state.pixelPerfectMode && (state.tool === "select" || state.tool === "rect" || state.tool === "distance") && imageBoundsContain(state.hoverImage);
+  return state.pixelPerfectMode && (state.tool === "select" || state.tool === "rect" || state.tool === "distance" || state.tool === "crop") && imageBoundsContain(state.hoverImage);
 }
 
 function loupeFocusPoint() {
@@ -1441,6 +1790,7 @@ function loupeFocusPoint() {
 
 function loupeMeasurements() {
   if (state.tool === "eyedropper") return [];
+  if (state.tool === "crop" && state.crop) return [state.crop];
   if (state.draft) return [state.draft];
   if (state.drag?.item?.type === "rect" || state.drag?.item?.type === "distance") return [state.drag.item];
   return state.measurements.filter((item) => item.id === state.selectedId);
@@ -1633,12 +1983,14 @@ function render() {
   ctx.clearRect(0, 0, size.width, size.height);
   drawImage();
   drawMeasurements();
+  drawCropOverlay();
   drawRulers();
   drawGuides();
   drawSmartGuides();
   drawSwatches();
   drawCopyToast();
   if (state.hoverScreen) drawLoupe(state.hoverScreen);
+  elements.applyCrop.hidden = state.tool !== "crop" || !state.crop;
 }
 
 function pointerDown(event) {
@@ -1683,7 +2035,7 @@ function pointerDown(event) {
   const selectedHandle = hitSelectedHandle(screenPoint);
   if (
     selectedHandle &&
-    (state.tool === "select" || state.tool === "rect" || state.tool === "distance")
+    (state.tool === "select" || state.tool === "rect" || state.tool === "distance" || state.tool === "crop")
   ) {
     state.selectedId = selectedHandle.item.id;
     state.drag = {
@@ -1693,6 +2045,7 @@ function pointerDown(event) {
       cursor: selectedHandle.cursor,
       start: dragPoint,
       original: structuredClone(selectedHandle.item),
+      undoSnapshot: createUndoSnapshot(),
     };
     render();
     return;
@@ -1701,7 +2054,7 @@ function pointerDown(event) {
   const selectedBody = hitSelectedMeasurementBody(screenPoint);
   if (
     selectedBody &&
-    (state.tool === "select" || state.tool === "rect" || state.tool === "distance")
+    (state.tool === "select" || state.tool === "rect" || state.tool === "distance" || state.tool === "crop")
   ) {
     state.selectedId = selectedBody.item.id;
     state.drag = {
@@ -1710,6 +2063,7 @@ function pointerDown(event) {
       cursor: selectedBody.cursor,
       start: dragPoint,
       original: structuredClone(selectedBody.item),
+      undoSnapshot: createUndoSnapshot(),
     };
     render();
     return;
@@ -1718,6 +2072,7 @@ function pointerDown(event) {
   const ruler = rulerHit(screenPoint);
   if (ruler?.type === "ruler") {
     setTool("guide");
+    const undoSnapshot = createUndoSnapshot();
     const guide = {
       id: uid(),
       type: "guide",
@@ -1726,7 +2081,14 @@ function pointerDown(event) {
     };
     state.guides.push(guide);
     state.selectedId = guide.id;
-    state.drag = { type: "guide", item: guide, start: imagePoint, original: structuredClone(guide), created: true };
+    state.drag = {
+      type: "guide",
+      item: guide,
+      start: imagePoint,
+      original: structuredClone(guide),
+      created: true,
+      undoSnapshot,
+    };
     render();
     return;
   }
@@ -1743,6 +2105,7 @@ function pointerDown(event) {
         cursor: hit.cursor,
         start: imagePoint,
         original: structuredClone(hit.item),
+        undoSnapshot: createUndoSnapshot(),
       };
     }
     render();
@@ -1752,7 +2115,15 @@ function pointerDown(event) {
   if (state.tool === "rect" && imageBoundsContain(imagePoint)) {
     const snappedPoint = snapMeasurementPoint(imagePoint);
     state.draft = { id: "draft", type: "rect", x: snappedPoint.x, y: snappedPoint.y, w: 0, h: 0 };
-    state.drag = { type: "drawRect", start: snappedPoint };
+    state.drag = { type: "drawRect", start: snappedPoint, undoSnapshot: createUndoSnapshot() };
+  }
+
+  if (state.tool === "crop" && imageBoundsContain(imagePoint)) {
+    const snappedPoint = snapMeasurementPoint(imagePoint);
+    const undoSnapshot = createUndoSnapshot();
+    state.crop = { id: "crop", type: "rect", x: snappedPoint.x, y: snappedPoint.y, w: 0, h: 0 };
+    state.selectedId = state.crop.id;
+    state.drag = { type: "drawCrop", start: snappedPoint, undoSnapshot };
   }
 
   if (state.tool === "distance" && imageBoundsContain(imagePoint)) {
@@ -1760,6 +2131,7 @@ function pointerDown(event) {
     if (!state.draft) {
       state.draft = { id: "draft", type: "distance", a: snappedPoint, b: snappedPoint };
     } else {
+      pushUndo();
       state.draft.b = event.shiftKey ? snapDistanceEnd(state.draft.a, snappedPoint) : snappedPoint;
       state.draft.id = uid();
       state.measurements.push(state.draft);
@@ -1793,7 +2165,7 @@ function pointerMove(event) {
     state.settings.smartGuides &&
     !state.drag &&
     !state.draft &&
-    (state.tool === "rect" || state.tool === "distance") &&
+    (state.tool === "rect" || state.tool === "distance" || state.tool === "crop") &&
     imageBoundsContain(imagePoint)
   ) {
     state.hoverSnapPoint = snapMeasurementPoint(imagePoint, { collectSmartGuides: true });
@@ -1818,8 +2190,27 @@ function pointerMove(event) {
   if (state.drag?.type === "drawRect" && state.draft) {
     const snappedPoint = snapMeasurementPoint(imagePoint, { collectSmartGuides: true });
     state.hoverSnapPoint = snappedPoint;
-    state.draft.w = snappedPoint.x - state.drag.start.x;
-    state.draft.h = snappedPoint.y - state.drag.start.y;
+    if (event.shiftKey) {
+      const constrained = constrainDrawRect(state.drag.start, snappedPoint);
+      state.draft.w = constrained.w;
+      state.draft.h = constrained.h;
+    } else {
+      state.draft.w = snappedPoint.x - state.drag.start.x;
+      state.draft.h = snappedPoint.y - state.drag.start.y;
+    }
+  }
+
+  if (state.drag?.type === "drawCrop" && state.crop) {
+    const snappedPoint = snapMeasurementPoint(imagePoint, { collectSmartGuides: true });
+    state.hoverSnapPoint = snappedPoint;
+    if (event.shiftKey) {
+      const constrained = constrainDrawRect(state.drag.start, snappedPoint);
+      state.crop.w = constrained.w;
+      state.crop.h = constrained.h;
+    } else {
+      state.crop.w = snappedPoint.x - state.drag.start.x;
+      state.crop.h = snappedPoint.y - state.drag.start.y;
+    }
   }
 
   if (state.draft?.type === "distance") {
@@ -1861,6 +2252,7 @@ function pointerMove(event) {
       state.drag.handle,
       state.drag.original,
       snapMeasurementPoint(imagePoint, { excludeIds: new Set([state.drag.item.id]), collectSmartGuides: true }),
+      { fromCenter: state.drag.item.type === "rect" && event.altKey, keepRatio: event.shiftKey },
     );
   }
 
@@ -1888,12 +2280,20 @@ function pointerUp() {
   if (state.drag?.type === "drawRect" && state.draft) {
     const rect = normalizedRect(state.draft);
     if (rect.w >= 1 || rect.h >= 1) {
+      pushExistingUndo(state.drag.undoSnapshot);
       state.draft = { id: uid(), type: "rect", ...rect };
       state.measurements.push(state.draft);
       state.selectedId = state.draft.id;
       persist();
     }
     state.draft = null;
+  }
+  if (state.drag?.type === "drawCrop" && state.crop) {
+    state.crop = normalizedCrop(state.crop);
+    state.selectedId = state.crop ? state.crop.id : null;
+    if (state.crop && hasChanged(state.drag.undoSnapshot?.crop, state.crop)) {
+      pushExistingUndo(state.drag.undoSnapshot);
+    }
   }
   if (state.drag?.type === "guide" && !guideIsInsideImage(state.drag.item)) {
     const removedId = state.drag.item.id;
@@ -1906,6 +2306,11 @@ function pointerUp() {
     state.drag?.type === "rectHandle" ||
     state.drag?.type === "distanceHandle"
   ) {
+    const finalItem = state.drag.item.id === "crop"
+      ? state.crop
+      : [...state.measurements, ...state.guides].find((item) => item.id === state.drag.item.id) ?? null;
+    const createdGuide = state.drag.type === "guide" && state.drag.created && finalItem;
+    if (createdGuide || hasChanged(state.drag.original, finalItem)) pushExistingUndo(state.drag.undoSnapshot);
     persist();
   }
   state.drag = null;
@@ -1930,12 +2335,21 @@ function wheel(event) {
 }
 
 function keyDown(event) {
+  const isEditingField = event.target instanceof HTMLInputElement || event.target instanceof HTMLTextAreaElement;
+  if (event.key === "Enter" && state.crop && !isEditingField) {
+    event.preventDefault();
+    void applyCrop();
+    return;
+  }
   if (event.code === "Space") {
     state.spacePressed = true;
     canvas.style.cursor = "grab";
   }
   const mod = isMac ? event.metaKey : event.ctrlKey;
-  if (mod && event.key === "0") {
+  if (mod && event.key.toLowerCase() === "z" && !event.shiftKey && !isEditingField) {
+    event.preventDefault();
+    void undo();
+  } else if (mod && event.key === "0") {
     event.preventDefault();
     fitToScreen();
   } else if (mod && event.key === "1") {
@@ -1950,7 +2364,7 @@ function keyDown(event) {
   } else if (event.key === "Delete" || event.key === "Backspace") {
     deleteSelected();
   } else if (!event.metaKey && !event.ctrlKey && !event.altKey) {
-    const keyMap = { v: "select", r: "rect", d: "distance", i: "eyedropper", z: "zoom" };
+    const keyMap = { v: "select", r: "rect", d: "distance", i: "eyedropper", z: "zoom", c: "crop" };
     const nextTool = keyMap[event.key.toLowerCase()];
     if (nextTool) setTool(nextTool);
   }
@@ -1963,7 +2377,12 @@ function keyUp(event) {
   }
 }
 
+elements.newButton.addEventListener("click", async () => {
+  await pushUndoBeforeImageChange();
+  resetProject();
+});
 elements.openButton.addEventListener("click", () => elements.fileInput.click());
+elements.captureButton.addEventListener("click", captureScreen);
 elements.fileInput.addEventListener("change", (event) => loadImageFile(event.target.files?.[0]));
 elements.toolButtons.forEach((button) => button.addEventListener("click", () => setTool(button.dataset.tool)));
 elements.zoomOut.addEventListener("click", () => zoomAroundCenter(state.viewport.scale / 1.25));
@@ -1976,16 +2395,27 @@ elements.zoomInfo.addEventListener("keydown", (event) => {
   elements.zoomInfo.blur();
 });
 elements.clearMeasurements.addEventListener("click", () => {
+  if (
+    state.measurements.length ||
+    state.guides.length ||
+    state.swatches.length ||
+    state.crop ||
+    state.currentColor
+  ) {
+    pushUndo();
+  }
   state.measurements = [];
   state.guides = [];
   state.selectedId = null;
   state.draft = null;
   state.drag = null;
+  state.crop = null;
   state.currentColor = null;
   persist();
   updateStatus();
   render();
 });
+elements.applyCrop.addEventListener("click", applyCrop);
 elements.exportJson.addEventListener("click", exportMeasurements);
 elements.importJson.addEventListener("click", () => elements.jsonInput.click());
 elements.jsonInput.addEventListener("change", (event) => importMeasurements(event.target.files?.[0]));
@@ -2017,7 +2447,27 @@ elements.recentProjectList.addEventListener("click", (event) => {
 });
 elements.theoryWidth.addEventListener("input", () => {
   const value = Number(elements.theoryWidth.value);
-  state.theoryWidth = Number.isFinite(value) && value > 0 ? value : null;
+  if (Number.isFinite(value) && value > 0) {
+    state.theoryWidth = value;
+    syncTheoryInputs("width");
+  } else {
+    state.theoryWidth = null;
+    state.theoryHeight = null;
+    syncTheoryInputs();
+  }
+  persist();
+  render();
+});
+elements.theoryHeight.addEventListener("input", () => {
+  const value = Number(elements.theoryHeight.value);
+  if (Number.isFinite(value) && value > 0) {
+    state.theoryHeight = value;
+    syncTheoryInputs("height");
+  } else {
+    state.theoryWidth = null;
+    state.theoryHeight = null;
+    syncTheoryInputs();
+  }
   persist();
   render();
 });
@@ -2036,6 +2486,7 @@ elements.colorInfo.addEventListener("click", async () => {
 });
 
 elements.dropZone.addEventListener("dragover", (event) => {
+  if (!hasFileDrop(event.dataTransfer)) return;
   event.preventDefault();
   elements.dropZone.classList.add("is-dragover");
 });
@@ -2043,22 +2494,29 @@ elements.dropZone.addEventListener("dragleave", () => elements.dropZone.classLis
 elements.dropZone.addEventListener("drop", (event) => {
   event.preventDefault();
   elements.dropZone.classList.remove("is-dragover");
-  loadImageFile(event.dataTransfer.files?.[0]);
+  loadImageFile(droppedImageFile(event.dataTransfer));
 });
 
 for (const eventName of ["dragenter", "dragover", "drop"]) {
   document.addEventListener(
     eventName,
     (event) => {
+      if (!hasFileDrop(event.dataTransfer)) return;
       event.preventDefault();
       if (eventName === "drop" && !elements.dropZone.contains(event.target)) {
         elements.dropZone.classList.remove("is-dragover");
-        loadImageFile(event.dataTransfer?.files?.[0]);
+        loadImageFile(droppedImageFile(event.dataTransfer));
       }
     },
     { capture: true },
   );
 }
+
+elements.recentProjectList.addEventListener("dragstart", (event) => {
+  if (event.target instanceof Element && event.target.closest(".recent-project")) {
+    event.preventDefault();
+  }
+});
 
 canvas.addEventListener("pointerdown", pointerDown);
 canvas.addEventListener("pointermove", pointerMove);
@@ -2069,13 +2527,14 @@ window.addEventListener("keydown", keyDown);
 window.addEventListener("keyup", keyUp);
 window.addEventListener("resize", resizeCanvas);
 window.addEventListener("click", () => setSettingsPanelOpen(false));
-window.addEventListener("paste", (event) => {
+window.addEventListener("paste", async (event) => {
   const imageItem = [...(event.clipboardData?.items ?? [])].find((item) => item.type.startsWith("image/"));
   const file = imageItem?.getAsFile();
   if (!file) return;
   event.preventDefault();
   const extension = file.type.split("/")[1] || "png";
-  loadImageBlob(file, `Pasted image ${new Date().toLocaleString("en-US")}.${extension}`);
+  await pushUndoBeforeImageChange();
+  await loadImageBlob(file, `Pasted image ${new Date().toLocaleString("en-US")}.${extension}`);
 });
 
 state.settings = readSettings();

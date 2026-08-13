@@ -11,7 +11,9 @@
     <header class="toolbar">
       <img class="app-icon" src="./images/pixel-perfect.svg" alt="" />
       <div class="group">
+        <button id="newButton" type="button" title="Start a new empty project">New</button>
         <button id="openButton" type="button" title="Open image">Open</button>
+        <button id="captureButton" type="button" title="Capture a browser tab or window">Capture</button>
         <input id="fileInput" type="file" accept="image/*" hidden />
       </div>
 
@@ -31,6 +33,10 @@
         <button class="tool" type="button" data-tool="zoom" title="Zoom (Z)" aria-label="Zoom">
           <img src="./images/zoom.svg" alt="" />
         </button>
+        <button class="tool" type="button" data-tool="crop" title="Crop (C)" aria-label="Crop">
+          <img src="./images/crop.svg" alt="" />
+        </button>
+        <button id="applyCrop" type="button" title="Apply crop" hidden>Apply crop</button>
       </div>
 
       <div class="group">
@@ -41,6 +47,10 @@
         <label class="theory" title="Theoretical width used to scale measurements">
           Theo W
           <input id="theoryWidth" type="number" min="1" step="1" placeholder="px" />
+        </label>
+        <label class="theory" title="Theoretical height used to scale measurements">
+          Theo H
+          <input id="theoryHeight" type="number" min="1" step="1" placeholder="px" />
         </label>
         <label class="toggle" title="Show a loupe and snap rectangle and distance points to whole pixels">
           <input id="pixelPerfectMode" type="checkbox" />
