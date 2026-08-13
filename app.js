@@ -191,6 +191,7 @@ function setTool(tool) {
   elements.toolButtons.forEach((button) => {
     button.classList.toggle("is-active", button.dataset.tool === tool);
   });
+  if (state.hoverScreen) updateCanvasCursor(state.hoverScreen);
   render();
 }
 
@@ -962,7 +963,7 @@ function updateCanvasCursor(screenPoint) {
   const hit = state.tool === "select" || state.tool === "rect" || state.tool === "distance"
     ? hitSelectedHandle(screenPoint) ?? hitSelectedMeasurementBody(screenPoint) ?? (state.tool === "select" ? hitTest(screenPoint) : null)
     : null;
-  canvas.style.cursor = hit?.cursor ?? (hit ? "move" : "crosshair");
+  canvas.style.cursor = hit?.cursor ?? (hit ? "move" : state.tool === "select" ? "default" : "crosshair");
 }
 
 function hitTest(screenPoint) {
@@ -1204,7 +1205,14 @@ function drawSmartGuides() {
 }
 
 function drawMeasurements() {
-  for (const item of [...state.measurements, state.draft].filter(Boolean)) {
+  const selected = state.measurements.find((item) => item.id === state.selectedId);
+  const items = [
+    ...state.measurements.filter((item) => item.id !== state.selectedId),
+    state.draft,
+    selected,
+  ].filter(Boolean);
+
+  for (const item of items) {
     if (item.type === "rect") drawRectMeasurement(item);
     if (item.type === "distance") drawDistanceMeasurement(item);
   }
@@ -1476,12 +1484,12 @@ function drawLoupeMeasurementOverlay(origin, imagePoint, pixel) {
 
     if (item.type === "distance") {
       const a = {
-        x: origin.x + (item.a.x - imagePoint.x) * pixel,
-        y: origin.y + (item.a.y - imagePoint.y) * pixel,
+        x: origin.x + (item.a.x - imagePoint.x + 0.5) * pixel,
+        y: origin.y + (item.a.y - imagePoint.y + 0.5) * pixel,
       };
       const b = {
-        x: origin.x + (item.b.x - imagePoint.x) * pixel,
-        y: origin.y + (item.b.y - imagePoint.y) * pixel,
+        x: origin.x + (item.b.x - imagePoint.x + 0.5) * pixel,
+        y: origin.y + (item.b.y - imagePoint.y + 0.5) * pixel,
       };
       ctx.setLineDash(item.id === "draft" ? [pixel, pixel] : []);
       ctx.lineWidth = pixel;
