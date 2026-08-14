@@ -58,12 +58,17 @@ function fitToScreen() {
   render();
 }
 
+// 100% means one theoretical pixel per screen pixel. With Theo W set to 400 on
+// an 800px image, that is a scale of 0.5, so the image measures the 400px the
+// user is designing against. Without a theoretical size, getScaleFactor() is 1
+// and this is a plain 1:1.
 function setActualZoom() {
   if (!state.image) return;
   const size = screenSize();
-  state.viewport.scale = 1;
-  state.viewport.x = RULER_SIZE + (size.width - RULER_SIZE - state.image.width) / 2;
-  state.viewport.y = RULER_SIZE + (size.height - RULER_SIZE - state.image.height) / 2;
+  const scale = clamp(getScaleFactor(), ZOOM_MIN, ZOOM_MAX);
+  state.viewport.scale = scale;
+  state.viewport.x = RULER_SIZE + (size.width - RULER_SIZE - state.image.width * scale) / 2;
+  state.viewport.y = RULER_SIZE + (size.height - RULER_SIZE - state.image.height * scale) / 2;
   updateStatus();
   render();
 }
@@ -97,5 +102,6 @@ function applyZoomInput() {
     updateStatus();
     return;
   }
-  zoomAroundCenter(value / 100);
+  // The field speaks in theoretical pixels, the viewport in image pixels.
+  zoomAroundCenter((value / 100) * getScaleFactor());
 }

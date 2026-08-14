@@ -62,9 +62,13 @@ http://127.0.0.1:4173/
 - `Enter`: Apply current crop
 - `Cmd/Ctrl + Z`: Undo recent drawing, crop, guide, swatch, import, clear or image replacement actions
 - `Delete` / `Backspace`: Delete selected measurement, guide or color swatch
-- `0`: Back to 1:1 and recenter the image (numpad zero, or the top-row zero, which needs `Shift` on AZERTY)
+- `0`: Back to 100% and recenter the image (numpad zero, or the top-row zero, which needs `Shift` on AZERTY)
 - `Cmd/Ctrl + 0`: Fit to screen
-- `Cmd/Ctrl + 1`: Zoom 100%
+- `Cmd/Ctrl + 1`: Back to 100% and recenter, same as `0`
+
+Zoom is expressed against the theoretical size, like every other measurement. With
+`Theo W` set to 400 on an 800px image, 100% draws the image 400px wide, so one
+theoretical pixel is one screen pixel. Without a theoretical size, 100% is a plain 1:1.
 - `Esc`: Cancel current action
 - `Space + drag`: Pan
 - Zoom tool: click to zoom in, `Alt`+click to zoom out, drag right/left to zoom in/out

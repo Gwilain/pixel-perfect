@@ -458,7 +458,9 @@ function updateStatus() {
     ? `Image: ${state.image.width} x ${state.image.height} px`
     : "Image: -";
   if (document.activeElement !== elements.zoomInfo) {
-    elements.zoomInfo.value = `${Math.round(state.viewport.scale * 100)}%`;
+    // Reported against the theoretical size, like every other measurement in the
+    // app, so 100% always means one theoretical pixel per screen pixel.
+    elements.zoomInfo.value = `${Math.round((state.viewport.scale / getScaleFactor()) * 100)}%`;
   }
   if (state.hoverImage && imageBoundsContain(state.hoverImage)) {
     elements.cursorInfo.textContent = `X: ${Math.floor(state.hoverImage.x)} Y: ${Math.floor(state.hoverImage.y)}`;
