@@ -11,9 +11,15 @@
     <header class="toolbar">
       <img class="app-icon" src="./images/pixel-perfect.svg" alt="" />
       <div class="group">
-        <button id="newButton" type="button" title="Start a new empty project">New</button>
-        <button id="openButton" type="button" title="Open image">Open</button>
-        <button id="captureButton" type="button" title="Capture a browser tab or window">Capture</button>
+        <button id="newButton" class="icon-button" type="button" title="Start a new empty project" aria-label="New">
+          <img src="./images/new.svg" alt="" />
+        </button>
+        <button id="openButton" class="icon-button" type="button" title="Open image" aria-label="Open">
+          <img src="./images/open.svg" alt="" />
+        </button>
+        <button id="captureButton" class="icon-button" type="button" title="Capture a browser tab or window" aria-label="Capture">
+          <img src="./images/capture.svg" alt="" />
+        </button>
         <input id="fileInput" type="file" accept="image/*" hidden />
       </div>
 
@@ -61,7 +67,7 @@
             <option value="viewport">vw / vh</option>
           </select>
         </label>
-        <label class="toggle" title="Show a loupe and snap rectangle and distance points to whole pixels">
+        <label class="toggle" title="Show a loupe and snap rectangle and distance points to whole pixels (P)">
           <input id="pixelPerfectMode" type="checkbox" />
           Pixel perfect
         </label>
@@ -75,30 +81,23 @@
           <button id="settingsButton" type="button" title="Settings" aria-label="Settings" aria-haspopup="true" aria-expanded="false">&#8942;</button>
           <section id="settingsPanel" class="settings-panel" aria-label="Settings" hidden>
             <div class="settings-title">Colors</div>
-            <label>
-              Rectangle
-              <input type="color" data-color-setting="rect" />
-            </label>
-            <label>
-              Rectangle selected
-              <input type="color" data-color-setting="rectSelected" />
-            </label>
-            <label>
-              Distance
-              <input type="color" data-color-setting="distance" />
-            </label>
-            <label>
-              Distance selected
-              <input type="color" data-color-setting="distanceSelected" />
-            </label>
-            <label>
-              Guide
-              <input type="color" data-color-setting="guide" />
-            </label>
-            <label>
-              Guide selected
-              <input type="color" data-color-setting="guideSelected" />
-            </label>
+            <div class="color-grid">
+              <div></div>
+              <div class="color-grid-heading">Normal</div>
+              <div class="color-grid-heading">Selected</div>
+              <div class="color-grid-label">Loupe center</div>
+              <input type="color" data-color-setting="loupeCenter" aria-label="Loupe center color" />
+              <div></div>
+              <div class="color-grid-label">Rectangle</div>
+              <input type="color" data-color-setting="rect" aria-label="Rectangle normal color" />
+              <input type="color" data-color-setting="rectSelected" aria-label="Rectangle selected color" />
+              <div class="color-grid-label">Distance</div>
+              <input type="color" data-color-setting="distance" aria-label="Distance normal color" />
+              <input type="color" data-color-setting="distanceSelected" aria-label="Distance selected color" />
+              <div class="color-grid-label">Guide</div>
+              <input type="color" data-color-setting="guide" aria-label="Guide normal color" />
+              <input type="color" data-color-setting="guideSelected" aria-label="Guide selected color" />
+            </div>
             <div class="settings-title settings-title-spaced">Loupe</div>
             <label class="range-setting">
               <span>Frame</span>
@@ -136,16 +135,35 @@
       </section>
     </main>
 
-    <aside class="containers-panel" aria-label="Containers">
-      <div class="containers-header">
-        <span>Containers</span>
-        <button id="toggleContainers" type="button" title="Collapse containers" aria-label="Collapse containers">
-          <svg viewBox="0 0 24 24" aria-hidden="true">
-            <path d="M15 6l-6 6 6 6" />
-          </svg>
-        </button>
+    <aside class="containers-panel" aria-label="Properties">
+      <button id="toggleContainers" type="button" title="Collapse containers" aria-label="Collapse containers">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <path d="M15 6l-6 6 6 6" />
+        </svg>
+      </button>
+      <div class="properties-header">
+        <span>Properties</span>
       </div>
-      <div id="containerList" class="container-list"></div>
+      <div class="properties-content">
+        <section class="properties-section">
+          <div class="properties-title">Elements</div>
+          <div id="containerList" class="container-list"></div>
+        </section>
+
+        <section class="properties-section">
+          <div class="properties-title">Swatches</div>
+          <div id="swatchList" class="swatch-list"></div>
+          <div id="swatchMessage" class="swatch-message" aria-live="polite"></div>
+        </section>
+
+        <section class="properties-section properties-section-code">
+          <div class="properties-title-row">
+            <div class="properties-title">Selected</div>
+            <button id="copyProperties" type="button">Copy</button>
+          </div>
+          <textarea id="propertyCode" class="property-code" readonly spellcheck="false" aria-label="Selected properties"></textarea>
+        </section>
+      </div>
     </aside>
 
     <footer class="statusbar">
@@ -158,7 +176,28 @@
       <span id="cursorInfo">X: - Y: -</span>
       <button id="colorInfo" type="button" title="Copy HEX">Color: -</button>
       <span id="hintInfo">Guides: drag from rulers | Z: zoom tool | Space+drag: pan | Cmd/Ctrl/Alt+wheel: zoom | Esc: cancel</span>
+      <button id="infoButton" class="info-button" type="button" title="About Pixel Perfect" aria-label="About Pixel Perfect" aria-expanded="false">
+        <svg viewBox="0 0 24 24" aria-hidden="true">
+          <circle cx="12" cy="12" r="9" />
+          <path d="M12 10v7M12 7h.01" />
+        </svg>
+      </button>
     </footer>
+
+    <div id="infoOverlay" class="info-overlay" hidden>
+      <section class="info-dialog" role="dialog" aria-modal="true" aria-labelledby="infoTitle">
+        <div class="info-dialog-header">
+          <h2 id="infoTitle">About Pixel Perfect</h2>
+          <button id="closeInfo" type="button" aria-label="Close about panel">Close</button>
+        </div>
+        <div class="info-dialog-body">
+          <p>Pixel Perfect is a local-first measurement tool created by Ghislain Gillet.</p>
+          <p>Your images, screenshots, measurements, swatches, preferences and recent projects stay in your browser storage. The app does not upload your work to a server.</p>
+          <p>The browser may still load the app files from the site that hosts it, and screen capture uses the browser's native permission prompt.</p>
+          <p>License: MIT. Copyright (c) 2026 Ghislain Gillet.</p>
+        </div>
+      </section>
+    </div>
 
     <script defer src="./js/core.js"></script>
     <script defer src="./js/project.js"></script>

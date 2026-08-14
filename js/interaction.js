@@ -26,12 +26,56 @@ function rectHandlePoints(item) {
   ];
 }
 
+function rectRadii(item) {
+  const value = item?.radii;
+  const single = Number.isFinite(item?.radius) ? item.radius : 0;
+  return {
+    tl: Number.isFinite(value?.tl) ? value.tl : single,
+    tr: Number.isFinite(value?.tr) ? value.tr : single,
+    br: Number.isFinite(value?.br) ? value.br : single,
+    bl: Number.isFinite(value?.bl) ? value.bl : single,
+  };
+}
+
+function maxRectRadius(item) {
+  const rect = normalizedRect(item);
+  return Math.max(0, Math.min(rect.w, rect.h) / 2);
+}
+
+function radiusHandlePoints(item) {
+  const rect = normalizedRect(item);
+  const maxRadius = maxRectRadius(item);
+  const radii = rectRadii(item);
+  const fallback = clamp(16, 0, maxRadius);
+  const offset = (corner) => clamp(radii[corner] || fallback, 0, maxRadius);
+  const left = rect.x;
+  const right = rect.x + rect.w;
+  const top = rect.y;
+  const bottom = rect.y + rect.h;
+  return [
+    { name: "tl", point: { x: left + offset("tl"), y: top + offset("tl") }, cursor: "grab" },
+    { name: "tr", point: { x: right - offset("tr"), y: top + offset("tr") }, cursor: "grab" },
+    { name: "br", point: { x: right - offset("br"), y: bottom - offset("br") }, cursor: "grab" },
+    { name: "bl", point: { x: left + offset("bl"), y: bottom - offset("bl") }, cursor: "grab" },
+  ];
+}
+
 function hitSelectedHandle(screenPoint) {
   const item = selectedMeasurement() ?? selectedCrop();
   if (!item) return null;
+  if (item.id !== "crop" && !isMeasurementViewportEditable(item)) return null;
   const halfSize = HANDLE_SIZE / 2 + 3;
 
   if (item.type === "rect") {
+    if (item.id !== "crop") {
+      for (const handle of radiusHandlePoints(item)) {
+        const screenHandle = toScreenPoint(handle.point);
+        if (distance(screenPoint, screenHandle) <= halfSize + 2) {
+          return { type: "radiusHandle", item, handle: handle.name, cursor: handle.cursor };
+        }
+      }
+    }
+
     for (const handle of rectHandlePoints(item)) {
       const screenHandle = toScreenPoint(handle.point);
       if (
@@ -61,6 +105,7 @@ function hitSelectedHandle(screenPoint) {
 function hitSelectedMeasurementBody(screenPoint) {
   const item = selectedMeasurement() ?? selectedCrop();
   if (!item) return null;
+  if (item.id !== "crop" && !isMeasurementViewportEditable(item)) return null;
   const imagePoint = toImagePoint(screenPoint);
   const tolerance = 8 / state.viewport.scale;
 
@@ -138,48 +183,15 @@ function swatchCodeRect(rects = swatchRects()) {
 }
 
 function swatchHit(screenPoint) {
-  const rects = swatchRects();
-  const codeRect = swatchCodeRect(rects);
-  if (
-    codeRect &&
-    screenPoint.x >= codeRect.x &&
-    screenPoint.x <= codeRect.x + codeRect.width &&
-    screenPoint.y >= codeRect.y &&
-    screenPoint.y <= codeRect.y + codeRect.height
-  ) {
-    return { type: "swatch", item: codeRect.swatch, cursor: "pointer" };
-  }
-
-  for (const rect of rects) {
-    if (
-      screenPoint.x >= rect.x &&
-      screenPoint.x <= rect.x + rect.width &&
-      screenPoint.y >= rect.y &&
-      screenPoint.y <= rect.y + rect.height
-    ) {
-      return { type: "swatch", item: rect.swatch, cursor: "pointer" };
-    }
-  }
   return null;
 }
 
 function showCopyToast(text) {
-  const size = screenSize();
-  const rects = swatchRects();
-  const codeRect = swatchCodeRect(rects);
-  const anchor = codeRect
-    ? { x: codeRect.x + codeRect.width / 2, y: codeRect.y + codeRect.height + 6 }
-    : { x: size.width - 64, y: RULER_SIZE + 64 };
-  state.copyToast = {
-    text,
-    centerX: clamp(anchor.x, 64, size.width - 64),
-    y: clamp(anchor.y, RULER_SIZE + 8, size.height - 30),
-    until: performance.now() + 1300,
-  };
+  state.swatchCopyMessage = { text, until: performance.now() + 1300 };
   render();
   window.setTimeout(() => {
-    if (state.copyToast?.until <= performance.now()) {
-      state.copyToast = null;
+    if (state.swatchCopyMessage?.until <= performance.now()) {
+      state.swatchCopyMessage = null;
       render();
     }
   }, 1350);
@@ -197,12 +209,12 @@ async function copyHex(hex) {
 }
 
 function addSwatch(color, imagePoint) {
-  const last = state.swatches[0];
-  if (last?.hex === color.hex) {
-    state.selectedId = last.id;
+  const existing = state.swatches.find((swatch) => swatch.hex.toUpperCase() === color.hex.toUpperCase());
+  if (existing) {
+    state.selectedId = existing.id;
     persist();
     render();
-    return last;
+    return existing;
   }
   pushUndo();
   const swatch = {
@@ -263,12 +275,36 @@ function applyRectHandle(item, handle, original, imagePoint, options = {}) {
   item.h = next.h;
 }
 
+function radiusFromPoint(item, corner, imagePoint) {
+  const rect = normalizedRect(item);
+  const right = rect.x + rect.w;
+  const bottom = rect.y + rect.h;
+  const dx = corner === "tr" || corner === "br" ? right - imagePoint.x : imagePoint.x - rect.x;
+  const dy = corner === "bl" || corner === "br" ? bottom - imagePoint.y : imagePoint.y - rect.y;
+  const radius = clamp(Math.min(dx, dy), 0, maxRectRadius(item));
+  return state.pixelPerfectMode ? Math.round(radius) : round(radius);
+}
+
+function applyRadiusHandle(item, corner, original, imagePoint, options = {}) {
+  const radius = radiusFromPoint(original, corner, imagePoint);
+  const next = rectRadii(original);
+  if (options.singleCorner) {
+    next[corner] = radius;
+  } else {
+    next.tl = radius;
+    next.tr = radius;
+    next.br = radius;
+    next.bl = radius;
+  }
+  item.radii = next;
+}
+
 function updateCanvasCursor(screenPoint) {
   if (state.spacePressed || state.drag?.type === "pan") {
     canvas.style.cursor = "grab";
     return;
   }
-  if (state.drag?.type === "guide" || state.drag?.type === "distanceHandle") {
+  if (state.drag?.type === "guide" || state.drag?.type === "distanceHandle" || state.drag?.type === "radiusHandle") {
     canvas.style.cursor = "move";
     return;
   }
@@ -318,6 +354,7 @@ function hitTest(screenPoint) {
 
   for (let i = state.measurements.length - 1; i >= 0; i -= 1) {
     const item = state.measurements[i];
+    if (!isMeasurementViewportEditable(item)) continue;
     if (item.type === "rect") {
       const rect = normalizedRect(item);
       if (

@@ -11,6 +11,7 @@ function resetProject() {
   state.hoverSnapPoint = null;
   state.currentColor = null;
   state.copyToast = null;
+  state.swatchCopyMessage = null;
   state.draft = null;
   state.drag = null;
   state.smartGuides = [];
@@ -93,6 +94,7 @@ async function loadImageBlob(blob, name, options = {}) {
   state.measurements = [];
   state.guides = [];
   state.swatches = [];
+  state.swatchCopyMessage = null;
   state.crop = null;
   state.theoryWidth = null;
   state.theoryHeight = null;

@@ -7,6 +7,10 @@ const elements = {
   containersPanel: document.querySelector(".containers-panel"),
   toggleContainers: document.querySelector("#toggleContainers"),
   containerList: document.querySelector("#containerList"),
+  swatchList: document.querySelector("#swatchList"),
+  swatchMessage: document.querySelector("#swatchMessage"),
+  propertyCode: document.querySelector("#propertyCode"),
+  copyProperties: document.querySelector("#copyProperties"),
   recentProjects: document.querySelector("#recentProjects"),
   recentProjectList: document.querySelector("#recentProjectList"),
   fileInput: document.querySelector("#fileInput"),
@@ -39,6 +43,9 @@ const elements = {
   cursorInfo: document.querySelector("#cursorInfo"),
   colorInfo: document.querySelector("#colorInfo"),
   hintInfo: document.querySelector("#hintInfo"),
+  infoButton: document.querySelector("#infoButton"),
+  infoOverlay: document.querySelector("#infoOverlay"),
+  closeInfo: document.querySelector("#closeInfo"),
 };
 
 const DEFAULT_SETTINGS = {
@@ -48,6 +55,7 @@ const DEFAULT_SETTINGS = {
   distanceSelected: "#45D0A0",
   guide: "#00D4FF",
   guideSelected: "#FF3D8B",
+  loupeCenter: "#45D0A0",
   loupeFrameSize: 17,
   remBase: 16,
   smartGuides: true,
@@ -68,6 +76,7 @@ const state = {
   guides: [],
   swatches: [],
   selectedId: null,
+  swatchCopyMessage: null,
   hoverImage: null,
   hoverSnapPoint: null,
   currentColor: null,
@@ -404,6 +413,18 @@ function canContainMeasurement(item) {
   return isRectMeasurement(item);
 }
 
+function isMeasurementVisible(item) {
+  return item?.visible !== false;
+}
+
+function isMeasurementLocked(item) {
+  return item?.locked === true;
+}
+
+function isMeasurementViewportEditable(item) {
+  return isMeasurementVisible(item) && !isMeasurementLocked(item);
+}
+
 function effectiveDisplayUnit(item = null) {
   const itemUnit = normalizeItemUnit(item?.unit);
   return itemUnit === "inherit" ? normalizeDisplayUnit(state.displayUnit) : itemUnit;
@@ -423,6 +444,8 @@ function sanitizeMeasurementTree() {
   const ids = new Set(state.measurements.map((item) => item.id));
   for (const item of state.measurements) {
     item.unit = normalizeItemUnit(item.unit);
+    item.visible = item.visible !== false;
+    item.locked = item.locked === true;
     if (!item.parentId || !ids.has(item.parentId) || item.parentId === item.id) {
       item.parentId = null;
       continue;

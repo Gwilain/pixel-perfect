@@ -261,6 +261,16 @@ function pointerMove(event) {
     );
   }
 
+  if (state.drag?.type === "radiusHandle") {
+    applyRadiusHandle(
+      state.drag.item,
+      state.drag.handle,
+      state.drag.original,
+      snapPointToPixel(imagePoint),
+      { singleCorner: event.altKey },
+    );
+  }
+
   if (state.drag?.type === "distanceHandle") {
     const item = state.drag.item;
     const other = state.drag.handle === "a" ? item.b : item.a;
@@ -309,6 +319,7 @@ function pointerUp() {
     state.drag?.type === "measurement" ||
     state.drag?.type === "guide" ||
     state.drag?.type === "rectHandle" ||
+    state.drag?.type === "radiusHandle" ||
     state.drag?.type === "distanceHandle"
   ) {
     const finalItem = state.drag.item.id === "crop"
@@ -361,6 +372,10 @@ function keyDown(event) {
     event.preventDefault();
     setActualZoom();
   } else if (event.key === "Escape") {
+    if (!elements.infoOverlay.hidden) {
+      setInfoPanelOpen(false);
+      return;
+    }
     if (!elements.settingsPanel.hidden) {
       setSettingsPanelOpen(false);
       return;
@@ -372,10 +387,21 @@ function keyDown(event) {
   } else if (event.key === "Delete" || event.key === "Backspace") {
     deleteSelected();
   } else if (!event.metaKey && !event.ctrlKey && !event.altKey) {
+    if (event.key.toLowerCase() === "p") {
+      togglePixelPerfectMode();
+      return;
+    }
     const keyMap = { v: "select", r: "rect", d: "distance", i: "eyedropper", z: "zoom", c: "crop" };
     const nextTool = keyMap[event.key.toLowerCase()];
     if (nextTool) setTool(nextTool);
   }
+}
+
+function togglePixelPerfectMode(force = null) {
+  state.pixelPerfectMode = typeof force === "boolean" ? force : !state.pixelPerfectMode;
+  elements.pixelPerfectMode.checked = state.pixelPerfectMode;
+  persist();
+  render();
 }
 
 function keyUp(event) {
@@ -495,12 +521,19 @@ elements.snapToGuides.addEventListener("change", () => {
   render();
 });
 elements.pixelPerfectMode.addEventListener("change", () => {
-  state.pixelPerfectMode = elements.pixelPerfectMode.checked;
-  persist();
-  render();
+  togglePixelPerfectMode(elements.pixelPerfectMode.checked);
 });
 elements.colorInfo.addEventListener("click", async () => {
-  if (state.currentColor) await navigator.clipboard.writeText(state.currentColor.hex);
+  if (state.currentColor) await copyHex(state.currentColor.hex);
+});
+elements.infoButton.addEventListener("click", (event) => {
+  event.stopPropagation();
+  setSettingsPanelOpen(false);
+  setInfoPanelOpen(elements.infoOverlay.hidden);
+});
+elements.closeInfo.addEventListener("click", () => setInfoPanelOpen(false));
+elements.infoOverlay.addEventListener("click", (event) => {
+  if (event.target === elements.infoOverlay) setInfoPanelOpen(false);
 });
 
 elements.dropZone.addEventListener("dragover", (event) => {

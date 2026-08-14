@@ -4,6 +4,13 @@ function setSettingsPanelOpen(open) {
   elements.settingsButton.setAttribute("aria-expanded", String(open));
 }
 
+function setInfoPanelOpen(open) {
+  elements.infoOverlay.hidden = !open;
+  elements.infoButton.classList.toggle("is-active", open);
+  elements.infoButton.setAttribute("aria-expanded", String(open));
+  if (open) elements.closeInfo.focus();
+}
+
 function drawImage() {
   if (!state.image) return;
   ctx.imageSmoothingEnabled = state.viewport.scale < 1;
@@ -157,9 +164,9 @@ function drawSmartGuides() {
 }
 
 function drawMeasurements() {
-  const selected = state.measurements.find((item) => item.id === state.selectedId);
+  const selected = state.measurements.find((item) => item.id === state.selectedId && isMeasurementVisible(item));
   const items = [
-    ...state.measurements.filter((item) => item.id !== state.selectedId),
+    ...state.measurements.filter((item) => item.id !== state.selectedId && isMeasurementVisible(item)),
     state.draft,
     selected,
   ].filter(Boolean);
@@ -181,12 +188,13 @@ function drawRectMeasurement(item) {
   ctx.fillStyle = colorAlpha(state.settings.rect, 0.12);
   ctx.setLineDash(item.id === "draft" ? [5, 4] : []);
   ctx.beginPath();
-  ctx.rect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
+  drawRectPath(item, topLeft, bottomRight);
   ctx.fill();
   ctx.stroke();
   const guideText = nearestGuideText(rect);
+  const radiusText = item.id !== "draft" ? formatRadiusText(item) : "";
   drawLabel(
-    `${formatMeasureValue(rect.w, "x", item)} x ${formatMeasureValue(rect.h, "y", item)} | X ${formatCoord(rect.x, "x", item)} Y ${formatCoord(rect.y, "y", item)}${guideText}`,
+    `${formatMeasureValue(rect.w, "x", item)} x ${formatMeasureValue(rect.h, "y", item)} | X ${formatCoord(rect.x, "x", item)} Y ${formatCoord(rect.y, "y", item)}${radiusText}${guideText}`,
     topLeft.x + 8,
     topLeft.y - 10,
     selected,
@@ -237,7 +245,63 @@ function drawRectHandles(item) {
     ctx.fillRect(point.x - HANDLE_SIZE / 2, point.y - HANDLE_SIZE / 2, HANDLE_SIZE, HANDLE_SIZE);
     ctx.strokeRect(point.x - HANDLE_SIZE / 2, point.y - HANDLE_SIZE / 2, HANDLE_SIZE, HANDLE_SIZE);
   }
+  if (item.id !== "crop") drawRadiusHandles(item);
   ctx.restore();
+}
+
+function drawRectPath(item, topLeft, bottomRight) {
+  const width = bottomRight.x - topLeft.x;
+  const height = bottomRight.y - topLeft.y;
+  const scale = state.viewport.scale;
+  const maxRadius = Math.max(0, Math.min(Math.abs(width), Math.abs(height)) / 2);
+  const radii = rectRadii(item);
+  const tl = clamp(radii.tl * scale, 0, maxRadius);
+  const tr = clamp(radii.tr * scale, 0, maxRadius);
+  const br = clamp(radii.br * scale, 0, maxRadius);
+  const bl = clamp(radii.bl * scale, 0, maxRadius);
+  if (!tl && !tr && !br && !bl) {
+    ctx.rect(topLeft.x, topLeft.y, width, height);
+    return;
+  }
+  const left = topLeft.x;
+  const top = topLeft.y;
+  const right = bottomRight.x;
+  const bottom = bottomRight.y;
+  ctx.moveTo(left + tl, top);
+  ctx.lineTo(right - tr, top);
+  ctx.quadraticCurveTo(right, top, right, top + tr);
+  ctx.lineTo(right, bottom - br);
+  ctx.quadraticCurveTo(right, bottom, right - br, bottom);
+  ctx.lineTo(left + bl, bottom);
+  ctx.quadraticCurveTo(left, bottom, left, bottom - bl);
+  ctx.lineTo(left, top + tl);
+  ctx.quadraticCurveTo(left, top, left + tl, top);
+  ctx.closePath();
+}
+
+function drawRadiusHandles(item) {
+  ctx.save();
+  ctx.setLineDash([]);
+  ctx.fillStyle = "#111315";
+  ctx.strokeStyle = state.settings.rectSelected;
+  ctx.lineWidth = 1.5;
+  for (const handle of radiusHandlePoints(item)) {
+    const point = toScreenPoint(handle.point);
+    ctx.beginPath();
+    ctx.arc(point.x, point.y, HANDLE_SIZE / 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+  }
+  ctx.restore();
+}
+
+function formatRadiusText(item) {
+  const radii = rectRadii(item);
+  const values = [radii.tl, radii.tr, radii.br, radii.bl].map((value) => Math.max(0, value));
+  if (!values.some(Boolean)) return "";
+  const same = values.every((value) => value === values[0]);
+  if (same) return ` | R ${formatMeasureValue(values[0], "x", item)}`;
+  return ` | R ${values.map((value) => formatMeasureValue(value, "x", item)).join("/")}`;
 }
 
 function drawDistanceHandles(item) {
@@ -275,40 +339,6 @@ function drawCropOverlay() {
   ctx.strokeRect(topLeft.x, topLeft.y, bottomRight.x - topLeft.x, bottomRight.y - topLeft.y);
   ctx.setLineDash([]);
   drawRectHandles(state.crop);
-  ctx.restore();
-}
-
-function drawSwatches() {
-  if (!state.swatches.length) return;
-  const rects = swatchRects();
-  ctx.save();
-  ctx.font = "12px ui-sans-serif, system-ui, sans-serif";
-  for (const rect of rects) {
-    const selected = rect.swatch.id === state.selectedId;
-    ctx.fillStyle = rect.swatch.hex;
-    ctx.strokeStyle = selected ? "#ffffff" : "rgba(0, 0, 0, 0.78)";
-    ctx.lineWidth = selected ? 2 : 1;
-    ctx.shadowColor = "rgba(0, 0, 0, 0.38)";
-    ctx.shadowBlur = 4;
-    roundedRect(rect.x, rect.y, rect.width, rect.height, 5);
-    ctx.fill();
-    ctx.stroke();
-    ctx.shadowBlur = 0;
-  }
-
-  const codeRect = swatchCodeRect(rects);
-  if (codeRect) {
-    ctx.fillStyle = "rgba(10, 12, 15, 0.88)";
-    ctx.strokeStyle = "rgba(255, 255, 255, 0.22)";
-    ctx.lineWidth = 1;
-    roundedRect(codeRect.x, codeRect.y, codeRect.width, codeRect.height, 5);
-    ctx.fill();
-    ctx.stroke();
-    ctx.fillStyle = "#f5f7fa";
-    ctx.textAlign = "center";
-    ctx.textBaseline = "middle";
-    ctx.fillText(codeRect.swatch.hex, codeRect.x + codeRect.width / 2, codeRect.y + codeRect.height / 2 + 0.5);
-  }
   ctx.restore();
 }
 
@@ -421,7 +451,7 @@ function loupeMeasurements() {
   if (state.tool === "crop" && state.crop) return [state.crop];
   if (state.draft) return [state.draft];
   if (state.drag?.item?.type === "rect" || state.drag?.item?.type === "distance") return [state.drag.item];
-  return state.measurements.filter((item) => item.id === state.selectedId);
+  return state.measurements.filter((item) => item.id === state.selectedId && isMeasurementVisible(item));
 }
 
 function loupeGuide() {
@@ -453,10 +483,29 @@ function drawLoupeMeasurementOverlay(origin, imagePoint, pixel) {
       const top = origin.y + (rect.y - imagePoint.y) * pixel;
       const right = origin.x + (rect.x + rect.w - imagePoint.x) * pixel;
       const bottom = origin.y + (rect.y + rect.h - imagePoint.y) * pixel;
+      const radii = rectRadii(item);
+      const maxRadius = Math.max(0, Math.min(Math.abs(right - left), Math.abs(bottom - top)) / 2);
+      const tl = clamp(radii.tl * pixel, 0, maxRadius);
+      const tr = clamp(radii.tr * pixel, 0, maxRadius);
+      const br = clamp(radii.br * pixel, 0, maxRadius);
+      const bl = clamp(radii.bl * pixel, 0, maxRadius);
       ctx.setLineDash([]);
       ctx.lineWidth = 1;
       ctx.beginPath();
-      ctx.rect(Math.round(left) + 0.5, Math.round(top) + 0.5, Math.round(right - left), Math.round(bottom - top));
+      if (tl || tr || br || bl) {
+        ctx.moveTo(left + tl, top);
+        ctx.lineTo(right - tr, top);
+        ctx.quadraticCurveTo(right, top, right, top + tr);
+        ctx.lineTo(right, bottom - br);
+        ctx.quadraticCurveTo(right, bottom, right - br, bottom);
+        ctx.lineTo(left + bl, bottom);
+        ctx.quadraticCurveTo(left, bottom, left, bottom - bl);
+        ctx.lineTo(left, top + tl);
+        ctx.quadraticCurveTo(left, top, left + tl, top);
+        ctx.closePath();
+      } else {
+        ctx.rect(Math.round(left) + 0.5, Math.round(top) + 0.5, Math.round(right - left), Math.round(bottom - top));
+      }
       ctx.stroke();
     }
 
@@ -596,7 +645,7 @@ function drawLoupe(screenPoint) {
   drawLoupeSmartGuideOverlay({ x, y, size: radius }, imagePoint, pixel);
   drawLoupeGuideOverlay({ x, y, size: radius }, imagePoint, pixel);
   if (state.drag?.type !== "guide") {
-    ctx.strokeStyle = state.tool === "distance" ? state.settings.distanceSelected : state.settings.rectSelected;
+    ctx.strokeStyle = state.settings.loupeCenter;
     ctx.lineWidth = 2;
     ctx.strokeRect(x + centerX, y + centerY, pixel, pixel);
   }
@@ -615,9 +664,8 @@ function render() {
   drawRulers();
   drawGuides();
   drawSmartGuides();
-  drawSwatches();
-  drawCopyToast();
   if (state.hoverScreen) drawLoupe(state.hoverScreen);
+  drawCopyToast();
   elements.applyCrop.hidden = state.tool !== "crop" || !state.crop;
   if (typeof renderContainersPanel === "function") renderContainersPanel();
 }
