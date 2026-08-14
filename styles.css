@@ -641,6 +641,30 @@ body.containers-opening #toggleContainers svg {
   flex: 0 0 auto;
 }
 
+/* The 2.5-row cap exists to stop Swatches from crowding out Elements. Once
+   Elements is collapsed nothing is competing for the space, so let Swatches
+   grow into it, up to its own content: a clipped row next to a large empty
+   area reads as a bug rather than as a scroll hint. */
+.properties-section-elements.is-collapsed ~ .properties-section-swatches:not(.is-collapsed) {
+  flex: 1 1 auto;
+  max-height: max-content;
+  transition: flex-grow 420ms cubic-bezier(.2, .7, .3, 1);
+}
+
+/* Fill the grown section rather than overflow it: with more swatches than the
+   free space can hold, the list has to scroll, not be clipped. */
+.properties-section-elements.is-collapsed ~ .properties-section-swatches:not(.is-collapsed) .property-accordion-mask {
+  display: flex;
+  flex-direction: column;
+}
+
+.properties-section-elements.is-collapsed ~ .properties-section-swatches:not(.is-collapsed)
+  :is(.property-accordion-body, .swatch-list) {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: none;
+}
+
 .property-accordion-header,
 .property-fixed-header {
   display: flex;
