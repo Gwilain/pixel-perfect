@@ -640,9 +640,6 @@ function renderContainersPanel() {
 function renderPanelStructure() {
   renderSwatchList();
   renderElementList();
-  requestAnimationFrame(() => {
-    syncAccordionHeights();
-  });
 }
 
 function renderElementList() {
@@ -723,52 +720,11 @@ function renderElementList() {
   for (const item of childrenByParent.get("root") ?? []) appendItem(item);
 }
 
-function accordionHeaderHeight(section) {
-  return section.querySelector(".property-accordion-header")?.offsetHeight ?? 32;
-}
-
-function naturalAccordionHeight(section) {
-  const headerHeight = accordionHeaderHeight(section);
-  const mask = section.querySelector(".property-accordion-mask");
-  return headerHeight + (mask?.scrollHeight ?? 0);
-}
-
-function declaredAccordionHeight(section) {
-  const value = getComputedStyle(section).getPropertyValue("--section-height").trim();
-  const height = Number.parseFloat(value);
-  return Number.isFinite(height) && value.endsWith("px") ? height : null;
-}
-
-function targetAccordionHeight(section, collapsed) {
-  if (collapsed) return accordionHeaderHeight(section);
-  if (!section.classList.contains("properties-section-elements")) {
-    return declaredAccordionHeight(section) ?? naturalAccordionHeight(section);
-  }
-
-  const panel = elements.containersPanel?.querySelector(".properties-main");
-  if (!panel) return naturalAccordionHeight(section);
-  const otherSections = [...panel.querySelectorAll(".property-accordion")].filter((item) => item !== section);
-  const usedHeight = otherSections.reduce((sum, item) => {
-    return sum + (item.classList.contains("is-collapsed") ? accordionHeaderHeight(item) : naturalAccordionHeight(item));
-  }, 0);
-  const available = panel.clientHeight - usedHeight;
-  return clamp(available, 120, 520);
-}
-
-function syncAccordionHeights() {
-  document.querySelectorAll(".properties-main .property-accordion").forEach((section) => {
-    section.style.height = `${targetAccordionHeight(section, section.classList.contains("is-collapsed"))}px`;
-  });
-}
-
+// Layout is CSS: flexbox decides the sizes, grid-template-rows animates the
+// collapse. All this has to do is flip the class.
 function setAccordionCollapsed(section, collapsed) {
-  const startHeight = section.getBoundingClientRect().height;
-  section.style.height = `${startHeight}px`;
   section.classList.toggle("is-collapsed", collapsed);
   section.querySelector(".property-accordion-toggle")?.setAttribute("aria-expanded", String(!collapsed));
-  requestAnimationFrame(() => {
-    syncAccordionHeights();
-  });
 }
 
 // Registers every panel listener and applies the stored collapsed state.
@@ -873,14 +829,6 @@ function initContainersPanel() {
       if (!section) return;
       setAccordionCollapsed(section, !section.classList.contains("is-collapsed"));
     });
-  });
-
-  window.addEventListener("resize", () => {
-    syncAccordionHeights();
-  });
-
-  requestAnimationFrame(() => {
-    syncAccordionHeights();
   });
 
   elements.containerList.addEventListener("dragstart", (event) => {

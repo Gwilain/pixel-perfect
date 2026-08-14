@@ -492,11 +492,10 @@ body.containers-closing .containers-panel {
   border-bottom: 1px solid var(--line);
 }
 
+/* Pinned to the bottom by being the last child of .properties-content, with
+   .properties-main taking the remaining space above it. */
 .properties-section-code {
-  flex: 0 0 205px;
-  height: 205px;
-  min-height: 205px;
-  max-height: 205px;
+  flex: 0 0 165px;
   box-sizing: border-box;
   display: flex;
   flex-direction: column;
@@ -569,12 +568,11 @@ body.containers-opening #toggleContainers svg {
 
 .container-list {
   width: 100%;
-  height: 100%;
   box-sizing: border-box;
+  flex: 1 1 auto;
   min-height: 0;
-  max-height: none;
   overflow-x: hidden;
-  overflow-y: scroll;
+  overflow-y: auto;
   scrollbar-gutter: stable;
   padding: 0 4px 4px 0;
   border: 1px solid transparent;
@@ -603,33 +601,44 @@ body.containers-opening #toggleContainers svg {
   margin-top: 0;
 }
 
+/* Accordion sizing is entirely declarative: no measured heights, no inline
+   styles. The body animates through grid-template-rows 1fr -> 0fr, which is the
+   one way to transition to and from content height without knowing it. */
 .property-accordion {
+  display: flex;
   flex: 0 0 auto;
-  height: var(--section-height, auto);
-  overflow: hidden;
-  transition: height 650ms cubic-bezier(.17, .67, .29, 1);
-}
-
-.property-accordion.is-collapsed {
-  height: 32px;
-  transition-timing-function: cubic-bezier(.55, -0.01, .38, 1.01);
-}
-
-.properties-section-elements {
-  flex: 0 0 auto;
+  flex-direction: column;
   min-height: 32px;
+  overflow: hidden;
+}
+
+/* Elements takes every pixel the other sections leave. Both flex-grow and
+   flex-basis are animatable, so collapsing it back to its header is smooth. */
+.properties-section-elements {
+  flex: 1 1 0;
+  transition:
+    flex-grow 420ms cubic-bezier(.2, .7, .3, 1),
+    flex-basis 420ms cubic-bezier(.2, .7, .3, 1);
 }
 
 .properties-section-elements.is-collapsed {
-  min-height: 32px;
+  flex: 0 0 32px;
 }
 
-.properties-section-inspector {
-  --section-height: 205px;
+.properties-section-elements .property-accordion-body {
+  flex: 1 1 auto;
 }
 
+.properties-section-elements .property-accordion-mask {
+  display: flex;
+  flex-direction: column;
+}
+
+/* Properties and Swatches are content-sized. Properties never changes; Swatches
+   is capped to 2.5 rows by .swatch-list below. */
+.properties-section-inspector,
 .properties-section-swatches {
-  --section-height: 190px;
+  flex: 0 0 auto;
 }
 
 .property-accordion-header,
@@ -686,17 +695,22 @@ body.containers-opening #toggleContainers svg {
 }
 
 .property-accordion-body {
-  height: calc(100% - 32px);
+  display: grid;
+  grid-template-rows: 1fr;
   min-height: 0;
   overflow: hidden;
+  transition: grid-template-rows 420ms cubic-bezier(.2, .7, .3, 1);
+}
+
+.property-accordion.is-collapsed .property-accordion-body {
+  grid-template-rows: 0fr;
 }
 
 .property-accordion-mask {
-  height: 100%;
   min-height: 0;
   padding-bottom: 8px;
   overflow: hidden;
-  transition: padding-bottom 650ms cubic-bezier(.17, .67, .29, 1);
+  transition: padding-bottom 420ms cubic-bezier(.2, .7, .3, 1);
 }
 
 .property-subsection {
@@ -917,28 +931,32 @@ body.containers-opening #toggleContainers svg {
 }
 
 .swatch-list {
+  --swatch-size: 50px;
+  --swatch-gap: 8px;
   display: grid;
+  /* Columns stay fluid so the row keeps 5 tiles; the row height is fixed so the
+     2.5-row cap below is exact rather than approximate. */
   grid-template-columns: repeat(5, minmax(0, 1fr));
-  max-height: 152px;
+  grid-auto-rows: var(--swatch-size);
+  /* Exactly 2.5 rows: two full rows, the two gaps between them, half a row.
+     The half row is what tells the eye there is more to scroll to. */
+  max-height: calc(var(--swatch-size) * 2.5 + var(--swatch-gap) * 2);
   overflow-x: hidden;
-  overflow-y: scroll;
-  gap: 8px;
+  overflow-y: auto;
+  gap: var(--swatch-gap);
   padding-right: 6px;
   scrollbar-gutter: stable;
 }
 
 .properties-section-swatches .property-accordion-mask {
   position: relative;
-  max-height: 190px;
-  overflow: hidden;
   padding-bottom: 28px;
 }
 
 .swatch-tile {
   position: relative;
   width: 100%;
-  aspect-ratio: 1;
-  min-height: 34px;
+  height: 100%;
   padding: 0;
   border: 1px solid transparent;
   border-radius: 6px;
