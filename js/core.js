@@ -70,6 +70,9 @@ const elements = {
   captureOverlay: document.querySelector("#captureOverlay"),
   startCapture: document.querySelector("#startCapture"),
   cancelCapture: document.querySelector("#cancelCapture"),
+  clearOverlay: document.querySelector("#clearOverlay"),
+  confirmClear: document.querySelector("#confirmClear"),
+  cancelClear: document.querySelector("#cancelClear"),
 };
 
 const DEFAULT_SETTINGS = {

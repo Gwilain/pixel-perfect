@@ -25,6 +25,35 @@ function resetProject() {
   render();
 }
 
+function hasClearableContent() {
+  return Boolean(
+    state.measurements.length ||
+      state.guides.length ||
+      state.swatches.length ||
+      state.crop ||
+      state.currentColor,
+  );
+}
+
+// Empties every annotation layer but keeps the image, so the user can start the
+// measuring over without reopening the file. Undoable in one step.
+function clearProject() {
+  if (!hasClearableContent()) return;
+  pushUndo();
+  state.measurements = [];
+  state.guides = [];
+  state.swatches = [];
+  state.selectedId = null;
+  state.draft = null;
+  state.drag = null;
+  state.crop = null;
+  state.currentColor = null;
+  state.swatchCopyMessage = null;
+  persist();
+  updateStatus();
+  render();
+}
+
 async function undo() {
   const snapshot = undoStack.pop();
   if (!snapshot) return;

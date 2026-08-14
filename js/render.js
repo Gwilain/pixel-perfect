@@ -16,6 +16,12 @@ function setCapturePanelOpen(open) {
   if (open) elements.startCapture.focus();
 }
 
+function setClearPanelOpen(open) {
+  elements.clearOverlay.hidden = !open;
+  // Focus Cancel, not the destructive action: a stray Enter should do nothing.
+  if (open) elements.cancelClear.focus();
+}
+
 function drawImage() {
   if (!state.image) return;
   ctx.imageSmoothingEnabled = state.viewport.scale < 1;

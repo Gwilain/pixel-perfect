@@ -46,7 +46,9 @@
       </div>
 
       <div class="group">
-        <button id="clearMeasurements" type="button" title="Clear measurements and guides">Clear</button>
+        <button id="clearMeasurements" class="icon-button" type="button" title="Clear everything" aria-label="Clear everything">
+          <img src="./images/clear.svg" alt="" />
+        </button>
       </div>
 
       <div class="group">
@@ -320,6 +322,22 @@
         </div>
         <div class="info-dialog-actions">
           <button id="startCapture" type="button">Choose tab</button>
+        </div>
+      </section>
+    </div>
+
+    <div id="clearOverlay" class="info-overlay" hidden>
+      <section class="info-dialog" role="alertdialog" aria-modal="true" aria-labelledby="clearTitle" aria-describedby="clearMessage">
+        <div class="info-dialog-header">
+          <h2 id="clearTitle">Clear everything?</h2>
+          <button id="cancelClear" type="button" aria-label="Cancel">Cancel</button>
+        </div>
+        <div class="info-dialog-body">
+          <p id="clearMessage">This removes every element, guide and colour swatch from this image, and the crop if there is one. The image itself is kept.</p>
+          <p>You can bring it all back with Cmd/Ctrl+Z.</p>
+        </div>
+        <div class="info-dialog-actions">
+          <button id="confirmClear" type="button">Clear everything</button>
         </div>
       </section>
     </div>

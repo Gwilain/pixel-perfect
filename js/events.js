@@ -376,6 +376,10 @@ function keyDown(event) {
     event.preventDefault();
     setActualZoom();
   } else if (event.key === "Escape") {
+    if (!elements.clearOverlay.hidden) {
+      setClearPanelOpen(false);
+      return;
+    }
     if (!elements.captureOverlay.hidden) {
       setCapturePanelOpen(false);
       return;
@@ -451,25 +455,18 @@ function initEvents() {
     elements.zoomInfo.blur();
   });
   elements.clearMeasurements.addEventListener("click", () => {
-    if (
-      state.measurements.length ||
-      state.guides.length ||
-      state.swatches.length ||
-      state.crop ||
-      state.currentColor
-    ) {
-      pushUndo();
-    }
-    state.measurements = [];
-    state.guides = [];
-    state.selectedId = null;
-    state.draft = null;
-    state.drag = null;
-    state.crop = null;
-    state.currentColor = null;
-    persist();
-    updateStatus();
-    render();
+    if (!hasClearableContent()) return;
+    setSettingsPanelOpen(false);
+    setInfoPanelOpen(false);
+    setClearPanelOpen(true);
+  });
+  elements.confirmClear.addEventListener("click", () => {
+    setClearPanelOpen(false);
+    clearProject();
+  });
+  elements.cancelClear.addEventListener("click", () => setClearPanelOpen(false));
+  elements.clearOverlay.addEventListener("click", (event) => {
+    if (event.target === elements.clearOverlay) setClearPanelOpen(false);
   });
   elements.applyCrop.addEventListener("click", applyCrop);
   elements.exportJson.addEventListener("click", exportMeasurements);
