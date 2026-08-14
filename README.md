@@ -62,6 +62,7 @@ http://127.0.0.1:4173/
 - `Enter`: Apply current crop
 - `Cmd/Ctrl + Z`: Undo recent drawing, crop, guide, swatch, import, clear or image replacement actions
 - `Delete` / `Backspace`: Delete selected measurement, guide or color swatch
+- `0`: Back to 1:1 and recenter the image (numpad zero, or the top-row zero, which needs `Shift` on AZERTY)
 - `Cmd/Ctrl + 0`: Fit to screen
 - `Cmd/Ctrl + 1`: Zoom 100%
 - `Esc`: Cancel current action

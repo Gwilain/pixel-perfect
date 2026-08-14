@@ -399,6 +399,14 @@ function keyDown(event) {
   } else if ((event.key === "Delete" || event.key === "Backspace") && !isEditingField) {
     deleteSelected();
   } else if (!isEditingField && !event.metaKey && !event.ctrlKey && !event.altKey) {
+    // Matched on event.code, not event.key: on AZERTY the top-row zero needs
+    // Shift, and the numpad zero reports "Insert" when NumLock is off. What the
+    // user presses is the physical key either way.
+    if (event.code === "Digit0" || event.code === "Numpad0") {
+      event.preventDefault();
+      setActualZoom();
+      return;
+    }
     if (event.key.toLowerCase() === "p") {
       togglePixelPerfectMode();
       return;
