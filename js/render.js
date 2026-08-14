@@ -408,30 +408,6 @@ function drawCropOverlay() {
   ctx.restore();
 }
 
-function drawCopyToast() {
-  if (!state.copyToast) return;
-  if (state.copyToast.until <= performance.now()) {
-    state.copyToast = null;
-    return;
-  }
-  ctx.save();
-  ctx.font = "12px ui-sans-serif, system-ui, sans-serif";
-  const paddingX = 8;
-  const width = ctx.measureText(state.copyToast.text).width + paddingX * 2;
-  const height = 24;
-  const x = clamp(state.copyToast.centerX - width / 2, 8, screenSize().width - width - 8);
-  ctx.fillStyle = "rgba(10, 12, 15, 0.92)";
-  ctx.strokeStyle = state.settings.rectSelected;
-  ctx.lineWidth = 1;
-  roundedRect(x, state.copyToast.y, width, height, 5);
-  ctx.fill();
-  ctx.stroke();
-  ctx.fillStyle = "#f5f7fa";
-  ctx.textBaseline = "middle";
-  ctx.fillText(state.copyToast.text, x + paddingX, state.copyToast.y + height / 2 + 0.5);
-  ctx.restore();
-}
-
 function nearestGuideText(rect) {
   if (!state.guides.length) return "";
   const edges = [
@@ -736,7 +712,7 @@ function drawLoupe(screenPoint) {
   ctx.restore();
 }
 
-function render() {
+function renderCanvas() {
   const size = screenSize();
   ctx.clearRect(0, 0, size.width, size.height);
   drawImage();
@@ -746,8 +722,28 @@ function render() {
   drawGuides();
   drawSmartGuides();
   if (state.hoverScreen) drawLoupe(state.hoverScreen);
-  drawCopyToast();
   elements.applyCrop.hidden = state.tool !== "crop" || !state.crop;
-  if (typeof renderContainersPanel === "function") renderContainersPanel();
+}
+
+let renderHandle = 0;
+
+// Paints the canvas and syncs the panel. Never call directly from an event handler:
+// use render(), which collapses the several calls one event can produce into one paint.
+function renderNow() {
+  if (renderHandle) {
+    cancelAnimationFrame(renderHandle);
+    renderHandle = 0;
+  }
+  renderCanvas();
+  renderContainersPanel();
+}
+
+function render() {
+  if (renderHandle) return;
+  renderHandle = requestAnimationFrame(() => {
+    renderHandle = 0;
+    renderCanvas();
+    renderContainersPanel();
+  });
 }
 

@@ -105,8 +105,8 @@ const state = {
   swatchCopyMessage: null,
   hoverImage: null,
   hoverSnapPoint: null,
+  hoverScreen: null,
   currentColor: null,
-  copyToast: null,
   draft: null,
   drag: null,
   smartGuides: [],
@@ -132,8 +132,6 @@ const isMac = navigator.platform.toLowerCase().includes("mac");
 const isHexColor = (value) => /^#[0-9a-f]{6}$/i.test(value);
 const RULER_SIZE = 12;
 const HANDLE_SIZE = 8;
-const SWATCH_SIZE = 28;
-const SWATCH_GAP = 6;
 const SNAP_DISTANCE = 8;
 const SETTINGS_KEY = "pixel-perfect:settings";
 const RECENT_PROJECTS_KEY = "pixel-perfect:recent-projects";
@@ -143,11 +141,16 @@ const DB_VERSION = 1;
 const UNDO_LIMIT = 40;
 const undoStack = [];
 
+function hexToRgb(hex) {
+  return {
+    r: parseInt(hex.slice(1, 3), 16),
+    g: parseInt(hex.slice(3, 5), 16),
+    b: parseInt(hex.slice(5, 7), 16),
+  };
+}
+
 function colorAlpha(hex, alpha) {
-  if (!isHexColor(hex)) return `rgba(244, 201, 93, ${alpha})`;
-  const r = parseInt(hex.slice(1, 3), 16);
-  const g = parseInt(hex.slice(3, 5), 16);
-  const b = parseInt(hex.slice(5, 7), 16);
+  const { r, g, b } = hexToRgb(isHexColor(hex) ? hex : DEFAULT_SETTINGS.rect);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
@@ -254,7 +257,8 @@ function resizeCanvas() {
   canvas.width = Math.max(1, Math.floor(rect.width * dpr));
   canvas.height = Math.max(1, Math.floor(rect.height * dpr));
   ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  render();
+  // Resizing the backing store clears it, so repaint synchronously to avoid a blank frame.
+  renderNow();
 }
 
 function screenSize() {
@@ -520,6 +524,40 @@ function sanitizeMeasurementTree() {
       parent = parent.parentId ? getMeasurementById(parent.parentId) : null;
     }
   }
+}
+
+function isFinitePoint(point) {
+  return Number.isFinite(point?.x) && Number.isFinite(point?.y);
+}
+
+function sanitizeMeasurements(list) {
+  if (!Array.isArray(list)) return [];
+  return list.filter((item) => {
+    if (!item || typeof item.id !== "string") return false;
+    if (item.type === "rect") {
+      return Number.isFinite(item.x) && Number.isFinite(item.y) && Number.isFinite(item.w) && Number.isFinite(item.h);
+    }
+    if (item.type === "distance") return isFinitePoint(item.a) && isFinitePoint(item.b);
+    return false;
+  });
+}
+
+function sanitizeGuides(list) {
+  if (!Array.isArray(list)) return [];
+  return list.filter(
+    (guide) =>
+      guide &&
+      typeof guide.id === "string" &&
+      (guide.orientation === "vertical" || guide.orientation === "horizontal") &&
+      Number.isFinite(guide.value),
+  );
+}
+
+function sanitizeSwatches(list) {
+  if (!Array.isArray(list)) return [];
+  return list
+    .filter((swatch) => swatch && typeof swatch.id === "string" && isHexColor(swatch.hex))
+    .map((swatch) => ({ ...swatch, hex: swatch.hex.toUpperCase(), rgb: hexToRgb(swatch.hex) }));
 }
 
 function syncTheoryInputs(source = null) {

@@ -23,20 +23,6 @@ function pointerDown(event) {
     return;
   }
 
-  const swatch = swatchHit(screenPoint);
-  if (swatch) {
-    state.selectedId = swatch.item.id;
-    state.currentColor = {
-      ...swatch.item.rgb,
-      a: 255,
-      hex: swatch.item.hex,
-    };
-    copyHex(swatch.item.hex);
-    updateStatus();
-    render();
-    return;
-  }
-
   const selectedHandle = hitSelectedHandle(screenPoint);
   if (
     selectedHandle &&
@@ -76,7 +62,9 @@ function pointerDown(event) {
 
   const ruler = rulerHit(screenPoint);
   if (ruler?.type === "ruler") {
-    setTool("guide");
+    state.draft = null;
+    state.smartGuides = [];
+    state.hoverSnapPoint = null;
     const undoSnapshot = createUndoSnapshot();
     const guide = {
       id: uid(),
@@ -319,8 +307,12 @@ function pointerUp() {
       pushExistingUndo(state.drag.undoSnapshot);
     }
   }
+  // A guide dragged back out of the image is discarded. If it was also created by this
+  // same drag, nothing changed overall and it must not cost an undo step.
+  let discardedNewGuide = false;
   if (state.drag?.type === "guide" && !guideIsInsideImage(state.drag.item)) {
     const removedId = state.drag.item.id;
+    discardedNewGuide = state.drag.created === true;
     state.guides = state.guides.filter((guide) => guide.id !== removedId);
     if (state.selectedId === removedId) state.selectedId = null;
   }
@@ -336,7 +328,9 @@ function pointerUp() {
       ? state.crop
       : [...state.measurements, ...state.guides].find((item) => item.id === state.drag.item.id) ?? null;
     const createdGuide = state.drag.type === "guide" && state.drag.created && finalItem;
-    if (createdGuide || hasChanged(state.drag.original, finalItem)) pushExistingUndo(state.drag.undoSnapshot);
+    if (!discardedNewGuide && (createdGuide || hasChanged(state.drag.original, finalItem))) {
+      pushExistingUndo(state.drag.undoSnapshot);
+    }
     persist();
   }
   state.drag = null;
@@ -367,7 +361,7 @@ function keyDown(event) {
     void applyCrop();
     return;
   }
-  if (event.code === "Space") {
+  if (event.code === "Space" && !isEditingField) {
     state.spacePressed = true;
     canvas.style.cursor = "grab";
   }
@@ -397,10 +391,10 @@ function keyDown(event) {
     cancelAction();
   } else if (event.key === "F2" && !isEditingField) {
     event.preventDefault();
-    if (typeof startRenameMeasurement === "function") startRenameMeasurement(state.selectedId);
-  } else if (event.key === "Delete" || event.key === "Backspace") {
+    startRenameMeasurement(state.selectedId);
+  } else if ((event.key === "Delete" || event.key === "Backspace") && !isEditingField) {
     deleteSelected();
-  } else if (!event.metaKey && !event.ctrlKey && !event.altKey) {
+  } else if (!isEditingField && !event.metaKey && !event.ctrlKey && !event.altKey) {
     if (event.key.toLowerCase() === "p") {
       togglePixelPerfectMode();
       return;

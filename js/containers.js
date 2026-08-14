@@ -247,7 +247,7 @@ function selectedPropertiesText() {
 function renderSelectedProperties() {
   if (!elements.propertyCode) return;
   const text = selectedPropertiesText();
-  elements.propertyCode.value = text;
+  setControlValue(elements.propertyCode, text);
   if (elements.copyProperties) {
     elements.copyProperties.disabled = text.startsWith("/* Select");
   }
@@ -314,6 +314,34 @@ function imageCoordFromPanel(value, axis = "x", item = null) {
   return parent ? absoluteValue + (axis === "y" ? parent.y : parent.x) : absoluteValue;
 }
 
+// Writes a control without stealing what the user is currently typing. A viewport
+// drag always wins, so canvas edits keep the panel live even if a field holds focus.
+function setControlValue(input, value) {
+  if (!input) return;
+  if (!state.drag && document.activeElement === input) return;
+  const next = String(value);
+  if (input.value !== next) input.value = next;
+}
+
+// Panel edits arrive one keystroke at a time. Snapshot once when the field takes
+// focus, push that single snapshot on commit, so an edit costs one undo step.
+let panelEditSnapshot = null;
+let panelEditDirty = false;
+
+function beginPanelEdit() {
+  if (!panelEditSnapshot) panelEditSnapshot = createUndoSnapshot();
+  panelEditDirty = true;
+}
+
+function commitPanelEdit() {
+  if (panelEditDirty) {
+    pushExistingUndo(panelEditSnapshot);
+    persist();
+  }
+  panelEditSnapshot = null;
+  panelEditDirty = false;
+}
+
 function renderGeometryControls() {
   const inputs = elements.geometryInputs;
   if (!inputs?.x) return;
@@ -324,14 +352,14 @@ function renderGeometryControls() {
     input.disabled = disabled;
   }
   if (!geometry) {
-    for (const input of Object.values(inputs)) input.value = "";
+    for (const input of Object.values(inputs)) setControlValue(input, "");
     if (elements.geometryUnit) elements.geometryUnit.textContent = "";
     return;
   }
-  inputs.x.value = panelNumber(panelCoordValue(geometry.x, "x", item));
-  inputs.y.value = panelNumber(panelCoordValue(geometry.y, "y", item));
-  inputs.w.value = panelNumber(panelMeasureValue(geometry.w, "x", item));
-  inputs.h.value = panelNumber(panelMeasureValue(geometry.h, "y", item));
+  setControlValue(inputs.x, panelNumber(panelCoordValue(geometry.x, "x", item)));
+  setControlValue(inputs.y, panelNumber(panelCoordValue(geometry.y, "y", item)));
+  setControlValue(inputs.w, panelNumber(panelMeasureValue(geometry.w, "x", item)));
+  setControlValue(inputs.h, panelNumber(panelMeasureValue(geometry.h, "y", item)));
   if (elements.geometryUnit) {
     const unit = effectiveDisplayUnit(item);
     const geometryUnit = unit === "viewport" ? "X/W vw | Y/H vh" : unit === "percent" ? "%" : unit;
@@ -349,14 +377,14 @@ function renderRadiusControls() {
   }
   updateModeButtons(elements.radiusModeButtons, disabled ? null : normalizeRadiusMode(item.radiusMode));
   if (disabled) {
-    for (const input of Object.values(inputs)) input.value = "";
+    for (const input of Object.values(inputs)) setControlValue(input, "");
     return;
   }
   const radii = rectRadii(item);
-  inputs.tl.value = panelNumber(radii.tl);
-  inputs.tr.value = panelNumber(radii.tr);
-  inputs.br.value = panelNumber(radii.br);
-  inputs.bl.value = panelNumber(radii.bl);
+  setControlValue(inputs.tl, panelNumber(radii.tl));
+  setControlValue(inputs.tr, panelNumber(radii.tr));
+  setControlValue(inputs.br, panelNumber(radii.br));
+  setControlValue(inputs.bl, panelNumber(radii.bl));
 }
 
 function renderPaddingControls() {
@@ -369,14 +397,14 @@ function renderPaddingControls() {
   }
   updateModeButtons(elements.paddingModeButtons, disabled ? null : normalizePaddingMode(item.paddingMode));
   if (disabled) {
-    for (const input of Object.values(inputs)) input.value = "";
+    for (const input of Object.values(inputs)) setControlValue(input, "");
     return;
   }
   const padding = rectPadding(item);
-  inputs.top.value = panelNumber(padding.top);
-  inputs.right.value = panelNumber(padding.right);
-  inputs.bottom.value = panelNumber(padding.bottom);
-  inputs.left.value = panelNumber(padding.left);
+  setControlValue(inputs.top, panelNumber(padding.top));
+  setControlValue(inputs.right, panelNumber(padding.right));
+  setControlValue(inputs.bottom, panelNumber(padding.bottom));
+  setControlValue(inputs.left, panelNumber(padding.left));
 }
 
 function updateModeButtons(buttons, activeMode) {
@@ -424,7 +452,7 @@ function paddingInputValues() {
   return Object.values(values).every(Number.isFinite) ? values : null;
 }
 
-function applyGeometryControls() {
+function applyGeometryControls(options = {}) {
   const item = selectedGeometryItem();
   const values = geometryInputValues();
   if (!item || !values) {
@@ -449,7 +477,7 @@ function applyGeometryControls() {
     return;
   }
 
-  pushUndo();
+  beginPanelEdit();
   if (item.type === "rect") {
     item.x = round(next.x);
     item.y = round(next.y);
@@ -478,11 +506,11 @@ function applyGeometryControls() {
   }
 
   if (item.id === "crop") state.crop = normalizedCrop(item);
-  persist();
+  if (!options.live) persist();
   render();
 }
 
-function applyRadiusControls(sourceCorner = "tl") {
+function applyRadiusControls(sourceCorner = "tl", options = {}) {
   const item = selectedGeometryItem();
   const values = radiusInputValues();
   if (!item || item.type !== "rect" || item.id === "crop" || !values) {
@@ -507,10 +535,10 @@ function applyRadiusControls(sourceCorner = "tl") {
     return;
   }
 
-  pushUndo();
+  beginPanelEdit();
   item.radiusMode = mode;
   item.radii = next;
-  persist();
+  if (!options.live) persist();
   render();
 }
 
@@ -532,7 +560,7 @@ function paddingByMode(item, values, sourceSide = "top") {
   return clampRectPaddingValues(item, values);
 }
 
-function applyPaddingControls(sourceSide = "top") {
+function applyPaddingControls(sourceSide = "top", options = {}) {
   const item = selectedGeometryItem();
   const values = paddingInputValues();
   if (!item || item.type !== "rect" || item.id === "crop" || !values) {
@@ -548,10 +576,10 @@ function applyPaddingControls(sourceSide = "top") {
     return;
   }
 
-  pushUndo();
+  beginPanelEdit();
   item.paddingMode = mode;
   item.padding = next;
-  persist();
+  if (!options.live) persist();
   render();
 }
 
@@ -588,13 +616,16 @@ function setPaddingMode(mode) {
   render();
 }
 
+function renderSwatchMessage() {
+  if (!elements.swatchMessage) return;
+  const message = state.swatchCopyMessage;
+  const text = message?.until > performance.now() ? message.text : "";
+  if (elements.swatchMessage.textContent !== text) elements.swatchMessage.textContent = text;
+}
+
 function renderSwatchList() {
   if (!elements.swatchList) return;
   elements.swatchList.replaceChildren();
-  if (elements.swatchMessage) {
-    const message = state.swatchCopyMessage;
-    elements.swatchMessage.textContent = message?.until > performance.now() ? message.text : "";
-  }
 
   if (!state.swatches.length) {
     const empty = document.createElement("div");
@@ -622,13 +653,55 @@ function renderSwatchList() {
   }
 }
 
-function renderContainersPanel() {
-  if (!elements.containerList) return;
+// Cheap pass: values only. Safe to run on every frame of a viewport drag, which is
+// what keeps the fields in sync with the canvas in real time.
+function renderPanelValues() {
   renderSelectedProperties();
   renderGeometryControls();
   renderRadiusControls();
   renderPaddingControls();
+  renderSwatchMessage();
+}
+
+// Everything the element rows and swatch tiles are built from. Geometry is absent on
+// purpose: moving or resizing an item must not rebuild the DOM.
+function panelStructureSignature() {
+  const rows = state.measurements
+    .filter((item) => item.type === "rect" || item.type === "distance")
+    .map((item) => [
+      item.id,
+      item.type,
+      item.parentId ?? "",
+      item.name ?? "",
+      isMeasurementVisible(item) ? 1 : 0,
+      isMeasurementLocked(item) ? 1 : 0,
+      normalizeItemUnit(item.unit),
+    ].join(":"))
+    .join("|");
+  const swatches = state.swatches.map((swatch) => `${swatch.id}:${swatch.hex}`).join("|");
+  return `${state.selectedId ?? ""}#${rows}#${swatches}`;
+}
+
+let panelStructureKey = null;
+
+function renderContainersPanel() {
+  if (!elements.containerList) return;
+  renderPanelValues();
+  const signature = panelStructureSignature();
+  if (signature === panelStructureKey) return;
+  panelStructureKey = signature;
+  renderPanelStructure();
+}
+
+function renderPanelStructure() {
   renderSwatchList();
+  renderElementList();
+  requestAnimationFrame(() => {
+    syncAccordionHeights();
+  });
+}
+
+function renderElementList() {
   elements.containerList.replaceChildren();
 
   const items = state.measurements.filter((item) => item.type === "rect" || item.type === "distance");
@@ -704,9 +777,6 @@ function renderContainersPanel() {
   };
 
   for (const item of childrenByParent.get("root") ?? []) appendItem(item);
-  requestAnimationFrame(() => {
-    syncAccordionHeights();
-  });
 }
 
 elements.containerList.addEventListener("click", (event) => {
@@ -760,40 +830,36 @@ elements.containerList.addEventListener("change", (event) => {
   render();
 });
 
-Object.values(elements.geometryInputs ?? {}).forEach((input) => {
-  input?.addEventListener("change", applyGeometryControls);
-  input?.addEventListener("keydown", (event) => {
+// "input" applies live so the viewport follows every keystroke; "change"/"blur" close
+// the edit session, which is what actually writes the undo entry and persists.
+function bindPanelInput(input, apply) {
+  if (!input) return;
+  const commit = () => {
+    apply();
+    commitPanelEdit();
+  };
+  input.addEventListener("input", () => apply({ live: true }));
+  input.addEventListener("change", commit);
+  input.addEventListener("blur", commit);
+  input.addEventListener("keydown", (event) => {
     event.stopPropagation();
-    if (event.key === "Enter") {
-      event.preventDefault();
-      applyGeometryControls();
-      input.blur();
-    }
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    commit();
+    input.blur();
   });
+}
+
+Object.values(elements.geometryInputs ?? {}).forEach((input) => {
+  bindPanelInput(input, (options = {}) => applyGeometryControls(options));
 });
 
 Object.entries(elements.radiusInputs ?? {}).forEach(([corner, input]) => {
-  input?.addEventListener("change", () => applyRadiusControls(corner));
-  input?.addEventListener("keydown", (event) => {
-    event.stopPropagation();
-    if (event.key === "Enter") {
-      event.preventDefault();
-      applyRadiusControls(corner);
-      input.blur();
-    }
-  });
+  bindPanelInput(input, (options = {}) => applyRadiusControls(corner, options));
 });
 
 Object.entries(elements.paddingInputs ?? {}).forEach(([side, input]) => {
-  input?.addEventListener("change", () => applyPaddingControls(side));
-  input?.addEventListener("keydown", (event) => {
-    event.stopPropagation();
-    if (event.key === "Enter") {
-      event.preventDefault();
-      applyPaddingControls(side);
-      input.blur();
-    }
-  });
+  bindPanelInput(input, (options = {}) => applyPaddingControls(side, options));
 });
 
 for (const button of elements.radiusModeButtons ?? []) {

@@ -215,52 +215,6 @@ function rulerHit(screenPoint) {
   return null;
 }
 
-function swatchRects() {
-  const size = screenSize();
-  const perRow = Math.max(1, Math.floor((size.width - RULER_SIZE - 16) / (SWATCH_SIZE + SWATCH_GAP)));
-  return state.swatches.map((swatch, index) => {
-    const row = Math.floor(index / perRow);
-    const col = index % perRow;
-    const x = size.width - 8 - SWATCH_SIZE - col * (SWATCH_SIZE + SWATCH_GAP);
-    const y = RULER_SIZE + 8 + row * (SWATCH_SIZE + SWATCH_GAP);
-    return { swatch, x, y, width: SWATCH_SIZE, height: SWATCH_SIZE };
-  });
-}
-
-function swatchBounds(rects = swatchRects()) {
-  if (!rects.length) return null;
-  const left = Math.min(...rects.map((rect) => rect.x));
-  const top = Math.min(...rects.map((rect) => rect.y));
-  const right = Math.max(...rects.map((rect) => rect.x + rect.width));
-  const bottom = Math.max(...rects.map((rect) => rect.y + rect.height));
-  return { left, top, right, bottom, width: right - left, height: bottom - top };
-}
-
-function selectedSwatch() {
-  return state.swatches.find((swatch) => swatch.id === state.selectedId) ?? state.swatches[0] ?? null;
-}
-
-function swatchCodeRect(rects = swatchRects()) {
-  const swatch = selectedSwatch();
-  const bounds = swatchBounds(rects);
-  if (!swatch || !bounds) return null;
-  ctx.save();
-  ctx.font = "12px ui-sans-serif, system-ui, sans-serif";
-  const width = Math.max(74, ctx.measureText(swatch.hex).width + 18);
-  ctx.restore();
-  return {
-    swatch,
-    x: bounds.left + (bounds.width - width) / 2,
-    y: bounds.bottom + 7,
-    width,
-    height: 24,
-  };
-}
-
-function swatchHit(screenPoint) {
-  return null;
-}
-
 function showCopyToast(text) {
   state.swatchCopyMessage = { text, until: performance.now() + 1300 };
   render();
@@ -418,11 +372,6 @@ function updateCanvasCursor(screenPoint) {
     return;
   }
   const ruler = rulerHit(screenPoint);
-  const swatch = swatchHit(screenPoint);
-  if (swatch) {
-    canvas.style.cursor = swatch.cursor;
-    return;
-  }
   if (ruler?.orientation === "horizontal") {
     canvas.style.cursor = "ns-resize";
     return;
@@ -444,9 +393,6 @@ function updateCanvasCursor(screenPoint) {
 function hitTest(screenPoint) {
   const imagePoint = toImagePoint(screenPoint);
   const tolerance = 8 / state.viewport.scale;
-
-  const swatch = swatchHit(screenPoint);
-  if (swatch) return swatch;
 
   const handleHit = hitSelectedHandle(screenPoint);
   if (handleHit) return handleHit;

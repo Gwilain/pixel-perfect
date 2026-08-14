@@ -10,7 +10,6 @@ function resetProject() {
   state.hoverImage = null;
   state.hoverSnapPoint = null;
   state.currentColor = null;
-  state.copyToast = null;
   state.swatchCopyMessage = null;
   state.draft = null;
   state.drag = null;
@@ -544,25 +543,29 @@ function persist() {
   localStorage.setItem(`pixel-measure:${state.imageSignature}`, JSON.stringify(payload));
 }
 
+function applyProjectPayload(payload) {
+  state.measurements = sanitizeMeasurements(payload.measurements);
+  sanitizeMeasurementTree();
+  state.guides = sanitizeGuides(payload.guides);
+  state.swatches = sanitizeSwatches(payload.swatches);
+  state.theoryWidth = Number.isFinite(payload.theoryWidth) ? payload.theoryWidth : null;
+  state.theoryHeight = Number.isFinite(payload.theoryHeight) ? payload.theoryHeight : null;
+  state.displayUnit = normalizeDisplayUnit(payload.displayUnit);
+  state.snapToGuides = typeof payload.snapToGuides === "boolean" ? payload.snapToGuides : true;
+  state.pixelPerfectMode = typeof payload.pixelPerfectMode === "boolean" ? payload.pixelPerfectMode : true;
+  syncTheoryInputs(state.theoryHeight && !state.theoryWidth ? "height" : "width");
+  elements.displayUnit.value = state.displayUnit;
+  elements.snapToGuides.checked = state.snapToGuides;
+  elements.pixelPerfectMode.checked = state.pixelPerfectMode;
+}
+
 function restoreFromStorage() {
   const raw = localStorage.getItem(`pixel-measure:${state.imageSignature}`);
   if (!raw) return;
   try {
     const payload = JSON.parse(raw);
     if (payload.imageSignature !== state.imageSignature) return;
-    state.measurements = Array.isArray(payload.measurements) ? payload.measurements : [];
-    sanitizeMeasurementTree();
-    state.guides = Array.isArray(payload.guides) ? payload.guides : [];
-    state.swatches = Array.isArray(payload.swatches) ? payload.swatches : [];
-    state.theoryWidth = Number.isFinite(payload.theoryWidth) ? payload.theoryWidth : null;
-    state.theoryHeight = Number.isFinite(payload.theoryHeight) ? payload.theoryHeight : null;
-    state.displayUnit = normalizeDisplayUnit(payload.displayUnit);
-    state.snapToGuides = typeof payload.snapToGuides === "boolean" ? payload.snapToGuides : true;
-    state.pixelPerfectMode = typeof payload.pixelPerfectMode === "boolean" ? payload.pixelPerfectMode : true;
-    syncTheoryInputs(state.theoryHeight && !state.theoryWidth ? "height" : "width");
-    elements.displayUnit.value = state.displayUnit;
-    elements.snapToGuides.checked = state.snapToGuides;
-    elements.pixelPerfectMode.checked = state.pixelPerfectMode;
+    applyProjectPayload(payload);
   } catch {
     localStorage.removeItem(`pixel-measure:${state.imageSignature}`);
   }
@@ -596,21 +599,19 @@ function exportMeasurements() {
 
 async function importMeasurements(file) {
   if (!file) return;
-  const payload = JSON.parse(await file.text());
+  let payload = null;
+  try {
+    payload = JSON.parse(await file.text());
+  } catch {
+    elements.hintInfo.textContent = "Import failed: this file is not valid JSON.";
+    return;
+  }
+  if (!payload || typeof payload !== "object") {
+    elements.hintInfo.textContent = "Import failed: unexpected file content.";
+    return;
+  }
   pushUndo();
-  state.measurements = Array.isArray(payload.measurements) ? payload.measurements : [];
-  sanitizeMeasurementTree();
-  state.guides = Array.isArray(payload.guides) ? payload.guides : [];
-  state.swatches = Array.isArray(payload.swatches) ? payload.swatches : [];
-  state.theoryWidth = Number.isFinite(payload.theoryWidth) ? payload.theoryWidth : null;
-  state.theoryHeight = Number.isFinite(payload.theoryHeight) ? payload.theoryHeight : null;
-  state.displayUnit = normalizeDisplayUnit(payload.displayUnit);
-  state.snapToGuides = typeof payload.snapToGuides === "boolean" ? payload.snapToGuides : true;
-  state.pixelPerfectMode = typeof payload.pixelPerfectMode === "boolean" ? payload.pixelPerfectMode : true;
-  syncTheoryInputs(state.theoryHeight && !state.theoryWidth ? "height" : "width");
-  elements.displayUnit.value = state.displayUnit;
-  elements.snapToGuides.checked = state.snapToGuides;
-  elements.pixelPerfectMode.checked = state.pixelPerfectMode;
+  applyProjectPayload(payload);
   state.selectedId = null;
   persist();
   updateStatus();
