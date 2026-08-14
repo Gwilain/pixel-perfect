@@ -522,6 +522,9 @@ function initEvents() {
       syncTheoryInputs();
     }
     persist();
+    // The theoretical size is what zoom is measured against, so the status bar
+    // has to be refreshed with it, not only the canvas and the panel.
+    updateStatus();
     render();
   });
   elements.theoryHeight.addEventListener("input", () => {
@@ -535,6 +538,7 @@ function initEvents() {
       syncTheoryInputs();
     }
     persist();
+    updateStatus();
     render();
   });
   elements.displayUnit.addEventListener("change", () => {
