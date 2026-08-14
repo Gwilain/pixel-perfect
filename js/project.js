@@ -332,61 +332,6 @@ function getPixelColor(point) {
   };
 }
 
-function normalizedRect(rect) {
-  const x = Math.min(rect.x, rect.x + rect.w);
-  const y = Math.min(rect.y, rect.y + rect.h);
-  return {
-    x,
-    y,
-    w: Math.abs(rect.w),
-    h: Math.abs(rect.h),
-  };
-}
-
-function constrainDrawRect(start, end) {
-  const dx = end.x - start.x;
-  const dy = end.y - start.y;
-  const size = Math.max(Math.abs(dx), Math.abs(dy));
-  return {
-    w: Math.sign(dx || 1) * size,
-    h: Math.sign(dy || 1) * size,
-  };
-}
-
-function constrainRectToRatio(left, top, right, bottom, original, handle, fromCenter) {
-  const originalRect = normalizedRect(original);
-  if (!originalRect.w || !originalRect.h) return { left, top, right, bottom };
-
-  const ratio = originalRect.w / originalRect.h;
-  let width = Math.max(0, right - left);
-  let height = Math.max(0, bottom - top);
-
-  if (handle.includes("w") || handle.includes("e")) {
-    height = width / ratio;
-  } else {
-    width = height * ratio;
-  }
-
-  if (fromCenter) {
-    const centerX = originalRect.x + originalRect.w / 2;
-    const centerY = originalRect.y + originalRect.h / 2;
-    return {
-      left: centerX - width / 2,
-      right: centerX + width / 2,
-      top: centerY - height / 2,
-      bottom: centerY + height / 2,
-    };
-  }
-
-  if (handle.includes("w")) left = right - width;
-  else right = left + width;
-
-  if (handle.includes("n")) top = bottom - height;
-  else bottom = top + height;
-
-  return { left, top, right, bottom };
-}
-
 function snapDistanceEnd(start, end) {
   const dx = end.x - start.x;
   const dy = end.y - start.y;
@@ -488,18 +433,6 @@ function nearestAlignmentSnap(value, orientation, excludeIds = new Set()) {
   const smartSnap = nearestSmartGuideSnap(value, orientation, excludeIds);
   if (guideSnap && (!smartSnap || guideSnap.delta <= smartSnap.delta)) return { ...guideSnap, smart: false };
   return smartSnap ? { ...smartSnap, smart: true } : null;
-}
-
-function snapPointToPixel(point) {
-  if (!state.pixelPerfectMode) return point;
-  return {
-    x: Math.round(point.x),
-    y: Math.round(point.y),
-  };
-}
-
-function snapGuideValue(value) {
-  return state.pixelPerfectMode ? Math.round(value) : value;
 }
 
 function snapMeasurementPoint(point, options = {}) {

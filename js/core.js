@@ -247,12 +247,6 @@ function readSettings() {
   }
 }
 
-function writeSettings(settings) {
-  state.settings = { ...DEFAULT_SETTINGS, ...settings };
-  writeStorageValue(SETTINGS_KEY, JSON.stringify(state.settings));
-  syncSettingsControls();
-  render();
-}
 
 function cloneStateValue(value) {
   return value == null ? value : structuredClone(value);
@@ -319,16 +313,6 @@ function syncSettingsControls() {
   elements.smartGuides.checked = state.settings.smartGuides;
 }
 
-function resizeCanvas() {
-  const rect = canvas.getBoundingClientRect();
-  const dpr = window.devicePixelRatio || 1;
-  canvas.width = Math.max(1, Math.floor(rect.width * dpr));
-  canvas.height = Math.max(1, Math.floor(rect.height * dpr));
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-  // Resizing the backing store clears it, so repaint synchronously to avoid a blank frame.
-  renderNow();
-}
-
 function screenSize() {
   return {
     width: canvas.width / (window.devicePixelRatio || 1),
@@ -371,23 +355,76 @@ function syncToolButtons() {
   });
 }
 
-function setTool(tool) {
-  const previousTool = state.tool;
-  state.tool = tool;
-  state.draft = null;
-  state.drag = null;
-  state.smartGuides = [];
-  state.hoverSnapPoint = null;
-  if (previousTool === "crop" && tool !== "crop" && state.selectedId === state.crop?.id) {
-    state.selectedId = null;
+// ---------------------------------------------------------------------------
+// Rect geometry. Pure functions of their arguments (plus pixelPerfectMode for
+// snapping), so they belong to the leaf layer rather than to project I/O.
+// ---------------------------------------------------------------------------
+
+function normalizedRect(rect) {
+  const x = Math.min(rect.x, rect.x + rect.w);
+  const y = Math.min(rect.y, rect.y + rect.h);
+  return {
+    x,
+    y,
+    w: Math.abs(rect.w),
+    h: Math.abs(rect.h),
+  };
+}
+
+function constrainDrawRect(start, end) {
+  const dx = end.x - start.x;
+  const dy = end.y - start.y;
+  const size = Math.max(Math.abs(dx), Math.abs(dy));
+  return {
+    w: Math.sign(dx || 1) * size,
+    h: Math.sign(dy || 1) * size,
+  };
+}
+
+function constrainRectToRatio(left, top, right, bottom, original, handle, fromCenter) {
+  const originalRect = normalizedRect(original);
+  if (!originalRect.w || !originalRect.h) return { left, top, right, bottom };
+
+  const ratio = originalRect.w / originalRect.h;
+  let width = Math.max(0, right - left);
+  let height = Math.max(0, bottom - top);
+
+  if (handle.includes("w") || handle.includes("e")) {
+    height = width / ratio;
+  } else {
+    width = height * ratio;
   }
-  if (tool === "crop") {
-    ensureCrop();
-    if (state.crop) state.selectedId = state.crop.id;
+
+  if (fromCenter) {
+    const centerX = originalRect.x + originalRect.w / 2;
+    const centerY = originalRect.y + originalRect.h / 2;
+    return {
+      left: centerX - width / 2,
+      right: centerX + width / 2,
+      top: centerY - height / 2,
+      bottom: centerY + height / 2,
+    };
   }
-  syncToolButtons();
-  if (state.hoverScreen) updateCanvasCursor(state.hoverScreen);
-  render();
+
+  if (handle.includes("w")) left = right - width;
+  else right = left + width;
+
+  if (handle.includes("n")) top = bottom - height;
+  else bottom = top + height;
+
+  return { left, top, right, bottom };
+}
+
+function snapPointToPixel(point) {
+  if (!state.pixelPerfectMode) return point;
+  return {
+    x: Math.round(point.x),
+    y: Math.round(point.y),
+  };
+}
+
+function snapGuideValue(value) {
+  return state.pixelPerfectMode ? Math.round(value) : value;
 }
 
 function ensureCrop() {
@@ -410,63 +447,6 @@ function normalizedCrop(rect) {
   const w = clamp(Math.round(crop.w), 1, state.image.width - x);
   const h = clamp(Math.round(crop.h), 1, state.image.height - y);
   return { id: "crop", type: "rect", x, y, w, h };
-}
-
-function fitToScreen() {
-  if (!state.image) return;
-  const size = screenSize();
-  const padding = 48;
-  const scale = Math.min(
-    (size.width - RULER_SIZE - padding) / state.image.width,
-    (size.height - RULER_SIZE - padding) / state.image.height,
-  );
-  state.viewport.scale = clamp(scale, 0.02, 64);
-  state.viewport.x = RULER_SIZE + (size.width - RULER_SIZE - state.image.width * state.viewport.scale) / 2;
-  state.viewport.y = RULER_SIZE + (size.height - RULER_SIZE - state.image.height * state.viewport.scale) / 2;
-  updateStatus();
-  render();
-}
-
-function setActualZoom() {
-  if (!state.image) return;
-  const size = screenSize();
-  state.viewport.scale = 1;
-  state.viewport.x = RULER_SIZE + (size.width - RULER_SIZE - state.image.width) / 2;
-  state.viewport.y = RULER_SIZE + (size.height - RULER_SIZE - state.image.height) / 2;
-  updateStatus();
-  render();
-}
-
-function zoomAt(screenPoint, nextScale) {
-  if (!state.image) return;
-  const oldScale = state.viewport.scale;
-  const scale = clamp(nextScale, 0.02, 64);
-  const imagePoint = toImagePoint(screenPoint);
-  state.viewport.scale = scale;
-  state.viewport.x = screenPoint.x - imagePoint.x * scale;
-  state.viewport.y = screenPoint.y - imagePoint.y * scale;
-  if (oldScale !== scale) {
-    updateStatus();
-    render();
-  }
-}
-
-function zoomAroundCenter(nextScale) {
-  const size = screenSize();
-  zoomAt({ x: size.width / 2, y: size.height / 2 }, nextScale);
-}
-
-function applyZoomInput() {
-  if (!state.image) {
-    updateStatus();
-    return;
-  }
-  const value = Number(elements.zoomInfo.value.replace("%", "").trim());
-  if (!Number.isFinite(value) || value <= 0) {
-    updateStatus();
-    return;
-  }
-  zoomAroundCenter(value / 100);
 }
 
 function getScaleFactor() {

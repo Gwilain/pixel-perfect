@@ -725,25 +725,7 @@ function renderCanvas() {
   elements.applyCrop.hidden = state.tool !== "crop" || !state.crop;
 }
 
-let renderHandle = 0;
-
-// Paints the canvas and syncs the panel. Never call directly from an event handler:
-// use render(), which collapses the several calls one event can produce into one paint.
-function renderNow() {
-  if (renderHandle) {
-    cancelAnimationFrame(renderHandle);
-    renderHandle = 0;
-  }
-  renderCanvas();
-  renderContainersPanel();
-}
-
-function render() {
-  if (renderHandle) return;
-  renderHandle = requestAnimationFrame(() => {
-    renderHandle = 0;
-    renderCanvas();
-    renderContainersPanel();
-  });
+function initCanvasPainter() {
+  registerPainter(renderCanvas);
 }
 

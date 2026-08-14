@@ -324,11 +324,16 @@
       </section>
     </div>
 
+    <!-- Load order follows the dependency graph: scheduler and core depend on
+         nothing, main.js runs the bootstrap once everything is declared. -->
+    <script defer src="./js/scheduler.js"></script>
     <script defer src="./js/core.js"></script>
+    <script defer src="./js/app.js"></script>
     <script defer src="./js/project.js"></script>
     <script defer src="./js/interaction.js"></script>
     <script defer src="./js/render.js"></script>
     <script defer src="./js/containers.js"></script>
     <script defer src="./js/events.js"></script>
+    <script defer src="./js/main.js"></script>
   </body>
 </html>

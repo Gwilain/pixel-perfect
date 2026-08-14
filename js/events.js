@@ -419,201 +419,207 @@ function keyUp(event) {
   }
 }
 
-elements.newButton.addEventListener("click", async () => {
-  await pushUndoBeforeImageChange();
-  resetProject();
-});
-elements.openButton.addEventListener("click", () => elements.fileInput.click());
-elements.captureButton.addEventListener("click", () => {
-  setSettingsPanelOpen(false);
-  setInfoPanelOpen(false);
-  setCapturePanelOpen(true);
-});
-elements.startCapture.addEventListener("click", () => {
-  setCapturePanelOpen(false);
-  captureScreen();
-});
-elements.cancelCapture.addEventListener("click", () => setCapturePanelOpen(false));
-elements.captureOverlay.addEventListener("click", (event) => {
-  if (event.target === elements.captureOverlay) setCapturePanelOpen(false);
-});
-elements.fileInput.addEventListener("change", (event) => loadImageFile(event.target.files?.[0]));
-elements.toolButtons.forEach((button) => button.addEventListener("click", () => setTool(button.dataset.tool)));
-elements.zoomOut.addEventListener("click", () => zoomAroundCenter(state.viewport.scale / 1.25));
-elements.zoomIn.addEventListener("click", () => zoomAroundCenter(state.viewport.scale * 1.25));
-elements.zoomInfo.addEventListener("change", applyZoomInput);
-elements.zoomInfo.addEventListener("keydown", (event) => {
-  if (event.key !== "Enter") return;
-  event.preventDefault();
-  applyZoomInput();
-  elements.zoomInfo.blur();
-});
-elements.clearMeasurements.addEventListener("click", () => {
-  if (
-    state.measurements.length ||
-    state.guides.length ||
-    state.swatches.length ||
-    state.crop ||
-    state.currentColor
-  ) {
-    pushUndo();
-  }
-  state.measurements = [];
-  state.guides = [];
-  state.selectedId = null;
-  state.draft = null;
-  state.drag = null;
-  state.crop = null;
-  state.currentColor = null;
-  persist();
-  updateStatus();
-  render();
-});
-elements.applyCrop.addEventListener("click", applyCrop);
-elements.exportJson.addEventListener("click", exportMeasurements);
-elements.importJson.addEventListener("click", () => elements.jsonInput.click());
-elements.jsonInput.addEventListener("change", (event) => importMeasurements(event.target.files?.[0]));
-elements.settingsButton.addEventListener("click", (event) => {
-  event.stopPropagation();
-  setSettingsPanelOpen(elements.settingsPanel.hidden);
-});
-elements.settingsPanel.addEventListener("click", (event) => event.stopPropagation());
-elements.colorSettings.forEach((input) => {
-  input.addEventListener("input", () => {
-    const key = input.dataset.colorSetting;
-    if (!key || !isHexColor(input.value)) return;
-    writeSettings({ ...state.settings, [key]: input.value.toUpperCase() });
+// Registers every document, window and canvas listener.
+function initEvents() {
+  elements.newButton.addEventListener("click", async () => {
+    await pushUndoBeforeImageChange();
+    resetProject();
   });
-});
-elements.loupeFrameSize.addEventListener("input", () => {
-  const loupeFrameSize = clamp(Number(elements.loupeFrameSize.value), 17, 37);
-  writeSettings({ ...state.settings, loupeFrameSize });
-});
-elements.remBase.addEventListener("input", () => {
-  const remBase = Number(elements.remBase.value);
-  if (!Number.isFinite(remBase) || remBase <= 0) return;
-  writeSettings({ ...state.settings, remBase: clamp(remBase, 1, 100) });
-});
-elements.smartGuides.addEventListener("change", () => {
-  writeSettings({ ...state.settings, smartGuides: elements.smartGuides.checked });
-});
-elements.resetSettings.addEventListener("click", () => writeSettings(DEFAULT_SETTINGS));
-elements.recentProjectList.addEventListener("click", (event) => {
-  const target = event.target instanceof Element ? event.target : null;
-  const button = target?.closest(".recent-project");
-  if (!button?.dataset.projectId) return;
-  reopenRecentProject(button.dataset.projectId);
-});
-elements.theoryWidth.addEventListener("input", () => {
-  const value = Number(elements.theoryWidth.value);
-  if (Number.isFinite(value) && value > 0) {
-    state.theoryWidth = value;
-    syncTheoryInputs("width");
-  } else {
-    state.theoryWidth = null;
-    state.theoryHeight = null;
-    syncTheoryInputs();
-  }
-  persist();
-  render();
-});
-elements.theoryHeight.addEventListener("input", () => {
-  const value = Number(elements.theoryHeight.value);
-  if (Number.isFinite(value) && value > 0) {
-    state.theoryHeight = value;
-    syncTheoryInputs("height");
-  } else {
-    state.theoryWidth = null;
-    state.theoryHeight = null;
-    syncTheoryInputs();
-  }
-  persist();
-  render();
-});
-elements.displayUnit.addEventListener("change", () => {
-  state.displayUnit = normalizeDisplayUnit(elements.displayUnit.value);
-  persist();
-  render();
-});
-elements.snapToGuides.addEventListener("change", () => {
-  state.snapToGuides = elements.snapToGuides.checked;
-  persist();
-  render();
-});
-elements.pixelPerfectMode.addEventListener("change", () => {
-  togglePixelPerfectMode(elements.pixelPerfectMode.checked);
-});
-elements.colorInfo.addEventListener("click", async () => {
-  if (state.currentColor) await copyHex(state.currentColor.hex);
-});
-elements.infoButton.addEventListener("click", (event) => {
-  event.stopPropagation();
-  setSettingsPanelOpen(false);
-  setInfoPanelOpen(elements.infoOverlay.hidden);
-});
-elements.closeInfo.addEventListener("click", () => setInfoPanelOpen(false));
-elements.infoOverlay.addEventListener("click", (event) => {
-  if (event.target === elements.infoOverlay) setInfoPanelOpen(false);
-});
+  elements.openButton.addEventListener("click", () => elements.fileInput.click());
+  elements.captureButton.addEventListener("click", () => {
+    setSettingsPanelOpen(false);
+    setInfoPanelOpen(false);
+    setCapturePanelOpen(true);
+  });
+  elements.startCapture.addEventListener("click", () => {
+    setCapturePanelOpen(false);
+    captureScreen();
+  });
+  elements.cancelCapture.addEventListener("click", () => setCapturePanelOpen(false));
+  elements.captureOverlay.addEventListener("click", (event) => {
+    if (event.target === elements.captureOverlay) setCapturePanelOpen(false);
+  });
+  elements.fileInput.addEventListener("change", (event) => loadImageFile(event.target.files?.[0]));
+  elements.toolButtons.forEach((button) => button.addEventListener("click", () => setTool(button.dataset.tool)));
+  elements.zoomOut.addEventListener("click", () => zoomAroundCenter(state.viewport.scale / 1.25));
+  elements.zoomIn.addEventListener("click", () => zoomAroundCenter(state.viewport.scale * 1.25));
+  elements.zoomInfo.addEventListener("change", applyZoomInput);
+  elements.zoomInfo.addEventListener("keydown", (event) => {
+    if (event.key !== "Enter") return;
+    event.preventDefault();
+    applyZoomInput();
+    elements.zoomInfo.blur();
+  });
+  elements.clearMeasurements.addEventListener("click", () => {
+    if (
+      state.measurements.length ||
+      state.guides.length ||
+      state.swatches.length ||
+      state.crop ||
+      state.currentColor
+    ) {
+      pushUndo();
+    }
+    state.measurements = [];
+    state.guides = [];
+    state.selectedId = null;
+    state.draft = null;
+    state.drag = null;
+    state.crop = null;
+    state.currentColor = null;
+    persist();
+    updateStatus();
+    render();
+  });
+  elements.applyCrop.addEventListener("click", applyCrop);
+  elements.exportJson.addEventListener("click", exportMeasurements);
+  elements.importJson.addEventListener("click", () => elements.jsonInput.click());
+  elements.jsonInput.addEventListener("change", (event) => importMeasurements(event.target.files?.[0]));
+  elements.settingsButton.addEventListener("click", (event) => {
+    event.stopPropagation();
+    setSettingsPanelOpen(elements.settingsPanel.hidden);
+  });
+  elements.settingsPanel.addEventListener("click", (event) => event.stopPropagation());
+  elements.colorSettings.forEach((input) => {
+    input.addEventListener("input", () => {
+      const key = input.dataset.colorSetting;
+      if (!key || !isHexColor(input.value)) return;
+      writeSettings({ ...state.settings, [key]: input.value.toUpperCase() });
+    });
+  });
+  elements.loupeFrameSize.addEventListener("input", () => {
+    const loupeFrameSize = clamp(Number(elements.loupeFrameSize.value), 17, 37);
+    writeSettings({ ...state.settings, loupeFrameSize });
+  });
+  elements.remBase.addEventListener("input", () => {
+    const remBase = Number(elements.remBase.value);
+    if (!Number.isFinite(remBase) || remBase <= 0) return;
+    writeSettings({ ...state.settings, remBase: clamp(remBase, 1, 100) });
+  });
+  elements.smartGuides.addEventListener("change", () => {
+    writeSettings({ ...state.settings, smartGuides: elements.smartGuides.checked });
+  });
+  elements.resetSettings.addEventListener("click", () => writeSettings(DEFAULT_SETTINGS));
+  elements.recentProjectList.addEventListener("click", (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    const button = target?.closest(".recent-project");
+    if (!button?.dataset.projectId) return;
+    reopenRecentProject(button.dataset.projectId);
+  });
+  elements.theoryWidth.addEventListener("input", () => {
+    const value = Number(elements.theoryWidth.value);
+    if (Number.isFinite(value) && value > 0) {
+      state.theoryWidth = value;
+      syncTheoryInputs("width");
+    } else {
+      state.theoryWidth = null;
+      state.theoryHeight = null;
+      syncTheoryInputs();
+    }
+    persist();
+    render();
+  });
+  elements.theoryHeight.addEventListener("input", () => {
+    const value = Number(elements.theoryHeight.value);
+    if (Number.isFinite(value) && value > 0) {
+      state.theoryHeight = value;
+      syncTheoryInputs("height");
+    } else {
+      state.theoryWidth = null;
+      state.theoryHeight = null;
+      syncTheoryInputs();
+    }
+    persist();
+    render();
+  });
+  elements.displayUnit.addEventListener("change", () => {
+    state.displayUnit = normalizeDisplayUnit(elements.displayUnit.value);
+    persist();
+    render();
+  });
+  elements.snapToGuides.addEventListener("change", () => {
+    state.snapToGuides = elements.snapToGuides.checked;
+    persist();
+    render();
+  });
+  elements.pixelPerfectMode.addEventListener("change", () => {
+    togglePixelPerfectMode(elements.pixelPerfectMode.checked);
+  });
+  elements.colorInfo.addEventListener("click", async () => {
+    if (state.currentColor) await copyHex(state.currentColor.hex);
+  });
+  elements.infoButton.addEventListener("click", (event) => {
+    event.stopPropagation();
+    setSettingsPanelOpen(false);
+    setInfoPanelOpen(elements.infoOverlay.hidden);
+  });
+  elements.closeInfo.addEventListener("click", () => setInfoPanelOpen(false));
+  elements.infoOverlay.addEventListener("click", (event) => {
+    if (event.target === elements.infoOverlay) setInfoPanelOpen(false);
+  });
 
-elements.dropZone.addEventListener("dragover", (event) => {
-  if (!hasFileDrop(event.dataTransfer)) return;
-  event.preventDefault();
-  elements.dropZone.classList.add("is-dragover");
-});
-elements.dropZone.addEventListener("dragleave", () => elements.dropZone.classList.remove("is-dragover"));
-elements.dropZone.addEventListener("drop", (event) => {
-  event.preventDefault();
-  elements.dropZone.classList.remove("is-dragover");
-  loadImageFile(droppedImageFile(event.dataTransfer));
-});
+  elements.dropZone.addEventListener("dragover", (event) => {
+    if (!hasFileDrop(event.dataTransfer)) return;
+    event.preventDefault();
+    elements.dropZone.classList.add("is-dragover");
+  });
+  elements.dropZone.addEventListener("dragleave", () => elements.dropZone.classList.remove("is-dragover"));
+  elements.dropZone.addEventListener("drop", (event) => {
+    event.preventDefault();
+    elements.dropZone.classList.remove("is-dragover");
+    loadImageFile(droppedImageFile(event.dataTransfer));
+  });
 
-for (const eventName of ["dragenter", "dragover", "drop"]) {
-  document.addEventListener(
-    eventName,
-    (event) => {
-      if (!hasFileDrop(event.dataTransfer)) return;
+  for (const eventName of ["dragenter", "dragover", "drop"]) {
+    document.addEventListener(
+      eventName,
+      (event) => {
+        if (!hasFileDrop(event.dataTransfer)) return;
+        event.preventDefault();
+        if (eventName === "drop" && !elements.dropZone.contains(event.target)) {
+          elements.dropZone.classList.remove("is-dragover");
+          loadImageFile(droppedImageFile(event.dataTransfer));
+        }
+      },
+      { capture: true },
+    );
+  }
+
+  elements.recentProjectList.addEventListener("dragstart", (event) => {
+    if (event.target instanceof Element && event.target.closest(".recent-project")) {
       event.preventDefault();
-      if (eventName === "drop" && !elements.dropZone.contains(event.target)) {
-        elements.dropZone.classList.remove("is-dragover");
-        loadImageFile(droppedImageFile(event.dataTransfer));
-      }
-    },
-    { capture: true },
-  );
+    }
+  });
+
+  canvas.addEventListener("pointerdown", pointerDown);
+  canvas.addEventListener("pointermove", pointerMove);
+  canvas.addEventListener("pointerup", pointerUp);
+  canvas.addEventListener("pointercancel", pointerUp);
+  canvas.addEventListener("wheel", wheel, { passive: false });
+  window.addEventListener("keydown", keyDown);
+  window.addEventListener("keyup", keyUp);
+  window.addEventListener("resize", resizeCanvas);
+  window.addEventListener("click", () => setSettingsPanelOpen(false));
+  window.addEventListener("paste", async (event) => {
+    const imageItem = [...(event.clipboardData?.items ?? [])].find((item) => item.type.startsWith("image/"));
+    const file = imageItem?.getAsFile();
+    if (!file) return;
+    event.preventDefault();
+    const extension = file.type.split("/")[1] || "png";
+    await pushUndoBeforeImageChange();
+    await loadImageBlob(file, `Pasted image ${new Date().toLocaleString("en-US")}.${extension}`);
+  });
 }
 
-elements.recentProjectList.addEventListener("dragstart", (event) => {
-  if (event.target instanceof Element && event.target.closest(".recent-project")) {
-    event.preventDefault();
-  }
-});
-
-canvas.addEventListener("pointerdown", pointerDown);
-canvas.addEventListener("pointermove", pointerMove);
-canvas.addEventListener("pointerup", pointerUp);
-canvas.addEventListener("pointercancel", pointerUp);
-canvas.addEventListener("wheel", wheel, { passive: false });
-window.addEventListener("keydown", keyDown);
-window.addEventListener("keyup", keyUp);
-window.addEventListener("resize", resizeCanvas);
-window.addEventListener("click", () => setSettingsPanelOpen(false));
-window.addEventListener("paste", async (event) => {
-  const imageItem = [...(event.clipboardData?.items ?? [])].find((item) => item.type.startsWith("image/"));
-  const file = imageItem?.getAsFile();
-  if (!file) return;
-  event.preventDefault();
-  const extension = file.type.split("/")[1] || "png";
-  await pushUndoBeforeImageChange();
-  await loadImageBlob(file, `Pasted image ${new Date().toLocaleString("en-US")}.${extension}`);
-});
-
-state.settings = readSettings();
-syncSettingsControls();
-elements.snapToGuides.checked = state.snapToGuides;
-elements.pixelPerfectMode.checked = state.pixelPerfectMode;
-elements.displayUnit.value = state.displayUnit;
-state.recentProjects = readRecentProjects();
-resizeCanvas();
-updateStatus();
-renderRecentProjects();
+// Reads persisted settings, syncs the controls and paints the first frame.
+function startApp() {
+  state.settings = readSettings();
+  syncSettingsControls();
+  elements.snapToGuides.checked = state.snapToGuides;
+  elements.pixelPerfectMode.checked = state.pixelPerfectMode;
+  elements.displayUnit.value = state.displayUnit;
+  state.recentProjects = readRecentProjects();
+  resizeCanvas();
+  updateStatus();
+  renderRecentProjects();
+}

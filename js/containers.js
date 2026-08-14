@@ -723,97 +723,6 @@ function renderElementList() {
   for (const item of childrenByParent.get("root") ?? []) appendItem(item);
 }
 
-elements.containerList.addEventListener("click", (event) => {
-  const target = event.target instanceof Element ? event.target : null;
-  if (target?.closest("select")) return;
-  const action = target?.closest(".container-action");
-  if (action) {
-    const row = action.closest(".container-row");
-    const item = getMeasurementById(row?.dataset.id);
-    if (!item) return;
-    event.preventDefault();
-    pushUndo();
-    if (action.dataset.action === "visibility") {
-      item.visible = !isMeasurementVisible(item);
-    } else if (action.dataset.action === "lock") {
-      item.locked = !isMeasurementLocked(item);
-    }
-    persist();
-    render();
-    return;
-  }
-  const row = target?.closest(".container-row");
-  if (!row?.dataset.id) return;
-  if (event.detail >= 2) {
-    event.preventDefault();
-    startRenameMeasurement(row.dataset.id);
-    return;
-  }
-  state.selectedId = row.dataset.id;
-  render();
-});
-
-elements.containerList.addEventListener("dblclick", (event) => {
-  const target = event.target instanceof Element ? event.target : null;
-  if (target?.closest("select") || target?.closest(".container-action")) return;
-  const row = target?.closest(".container-row");
-  if (!row?.dataset.id) return;
-  event.preventDefault();
-  startRenameMeasurement(row.dataset.id);
-});
-
-elements.containerList.addEventListener("change", (event) => {
-  const target = event.target instanceof HTMLSelectElement ? event.target : null;
-  if (!target?.classList.contains("container-unit")) return;
-  const row = target.closest(".container-row");
-  const item = getMeasurementById(row?.dataset.id);
-  if (!item) return;
-  pushUndo();
-  item.unit = normalizeItemUnit(target.value);
-  persist();
-  render();
-});
-
-// "input" applies live so the viewport follows every keystroke; "change"/"blur" close
-// the edit session, which is what actually writes the undo entry and persists.
-function bindPanelInput(input, apply) {
-  if (!input) return;
-  const commit = () => {
-    apply();
-    commitPanelEdit();
-  };
-  input.addEventListener("input", () => apply({ live: true }));
-  input.addEventListener("change", commit);
-  input.addEventListener("blur", commit);
-  input.addEventListener("keydown", (event) => {
-    event.stopPropagation();
-    if (event.key !== "Enter") return;
-    event.preventDefault();
-    commit();
-    input.blur();
-  });
-}
-
-Object.values(elements.geometryInputs ?? {}).forEach((input) => {
-  bindPanelInput(input, (options = {}) => applyGeometryControls(options));
-});
-
-Object.entries(elements.radiusInputs ?? {}).forEach(([corner, input]) => {
-  bindPanelInput(input, (options = {}) => applyRadiusControls(corner, options));
-});
-
-Object.entries(elements.paddingInputs ?? {}).forEach(([side, input]) => {
-  bindPanelInput(input, (options = {}) => applyPaddingControls(side, options));
-});
-
-for (const button of elements.radiusModeButtons ?? []) {
-  button.addEventListener("click", () => setRadiusMode(button.dataset.radiusMode));
-}
-
-for (const button of elements.paddingModeButtons ?? []) {
-  button.addEventListener("click", () => setPaddingMode(button.dataset.paddingMode));
-}
-
 function accordionHeaderHeight(section) {
   return section.querySelector(".property-accordion-header")?.offsetHeight ?? 32;
 }
@@ -862,113 +771,209 @@ function setAccordionCollapsed(section, collapsed) {
   });
 }
 
-document.querySelectorAll(".property-accordion-toggle").forEach((button) => {
-  button.addEventListener("click", () => {
-    const section = button.closest(".property-accordion");
-    if (!section) return;
-    setAccordionCollapsed(section, !section.classList.contains("is-collapsed"));
+// Registers every panel listener and applies the stored collapsed state.
+// Called once from main.js: nothing in this module runs on import.
+function initContainersPanel() {
+  registerPainter(renderContainersPanel);
+
+  elements.containerList.addEventListener("click", (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest("select")) return;
+    const action = target?.closest(".container-action");
+    if (action) {
+      const row = action.closest(".container-row");
+      const item = getMeasurementById(row?.dataset.id);
+      if (!item) return;
+      event.preventDefault();
+      pushUndo();
+      if (action.dataset.action === "visibility") {
+        item.visible = !isMeasurementVisible(item);
+      } else if (action.dataset.action === "lock") {
+        item.locked = !isMeasurementLocked(item);
+      }
+      persist();
+      render();
+      return;
+    }
+    const row = target?.closest(".container-row");
+    if (!row?.dataset.id) return;
+    if (event.detail >= 2) {
+      event.preventDefault();
+      startRenameMeasurement(row.dataset.id);
+      return;
+    }
+    state.selectedId = row.dataset.id;
+    render();
   });
-});
 
-window.addEventListener("resize", () => {
-  syncAccordionHeights();
-});
-
-requestAnimationFrame(() => {
-  syncAccordionHeights();
-});
-
-elements.containerList.addEventListener("dragstart", (event) => {
-  const row = event.target instanceof Element ? event.target.closest(".container-row") : null;
-  if (event.target instanceof Element && event.target.closest(".container-action")) {
+  elements.containerList.addEventListener("dblclick", (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    if (target?.closest("select") || target?.closest(".container-action")) return;
+    const row = target?.closest(".container-row");
+    if (!row?.dataset.id) return;
     event.preventDefault();
-    return;
+    startRenameMeasurement(row.dataset.id);
+  });
+
+  elements.containerList.addEventListener("change", (event) => {
+    const target = event.target instanceof HTMLSelectElement ? event.target : null;
+    if (!target?.classList.contains("container-unit")) return;
+    const row = target.closest(".container-row");
+    const item = getMeasurementById(row?.dataset.id);
+    if (!item) return;
+    pushUndo();
+    item.unit = normalizeItemUnit(target.value);
+    persist();
+    render();
+  });
+
+  // "input" applies live so the viewport follows every keystroke; "change"/"blur" close
+  // the edit session, which is what actually writes the undo entry and persists.
+  function bindPanelInput(input, apply) {
+    if (!input) return;
+    const commit = () => {
+      apply();
+      commitPanelEdit();
+    };
+    input.addEventListener("input", () => apply({ live: true }));
+    input.addEventListener("change", commit);
+    input.addEventListener("blur", commit);
+    input.addEventListener("keydown", (event) => {
+      event.stopPropagation();
+      if (event.key !== "Enter") return;
+      event.preventDefault();
+      commit();
+      input.blur();
+    });
   }
-  if (!row?.dataset.id) return;
-  containerDrag = row.dataset.id;
-  event.dataTransfer.effectAllowed = "move";
-  event.dataTransfer.setData("text/plain", containerDrag);
-});
 
-elements.containerList.addEventListener("dragover", (event) => {
-  const row = event.target instanceof Element ? event.target.closest(".container-row") : null;
-  const target = getMeasurementById(row?.dataset.id);
-  const dragged = getMeasurementById(containerDrag);
-  if (!dragged) return;
-  event.preventDefault();
-  clearContainerDropStyles();
-  if (!row) {
-    elements.containerList.classList.add("is-drop-root");
-    return;
+  Object.values(elements.geometryInputs ?? {}).forEach((input) => {
+    bindPanelInput(input, (options = {}) => applyGeometryControls(options));
+  });
+
+  Object.entries(elements.radiusInputs ?? {}).forEach(([corner, input]) => {
+    bindPanelInput(input, (options = {}) => applyRadiusControls(corner, options));
+  });
+
+  Object.entries(elements.paddingInputs ?? {}).forEach(([side, input]) => {
+    bindPanelInput(input, (options = {}) => applyPaddingControls(side, options));
+  });
+
+  for (const button of elements.radiusModeButtons ?? []) {
+    button.addEventListener("click", () => setRadiusMode(button.dataset.radiusMode));
   }
-  if (!target || dragged.id === target.id) return;
-  const mode = containerDropMode(event, row, target);
-  if (mode === "child" && (!canContainMeasurement(target) || isDescendantOf(target, dragged.id))) return;
-  row.classList.add(`is-drop-${mode}`);
-});
 
-elements.containerList.addEventListener("dragleave", (event) => {
-  if (!elements.containerList.contains(event.relatedTarget)) clearContainerDropStyles();
-});
-
-elements.containerList.addEventListener("drop", (event) => {
-  const row = event.target instanceof Element ? event.target.closest(".container-row") : null;
-  const target = getMeasurementById(row?.dataset.id);
-  const draggedId = containerDrag || event.dataTransfer.getData("text/plain");
-  clearContainerDropStyles();
-  containerDrag = null;
-  if (!draggedId) return;
-  event.preventDefault();
-  if (!row) {
-    unparentMeasurement(draggedId);
-    return;
+  for (const button of elements.paddingModeButtons ?? []) {
+    button.addEventListener("click", () => setPaddingMode(button.dataset.paddingMode));
   }
-  if (!target) return;
-  reorderMeasurement(draggedId, target.id, containerDropMode(event, row, target));
-});
 
-elements.containerList.addEventListener("dragend", () => {
-  clearContainerDropStyles();
-  containerDrag = null;
-});
+  document.querySelectorAll(".property-accordion-toggle").forEach((button) => {
+    button.addEventListener("click", () => {
+      const section = button.closest(".property-accordion");
+      if (!section) return;
+      setAccordionCollapsed(section, !section.classList.contains("is-collapsed"));
+    });
+  });
 
-elements.swatchList?.addEventListener("click", (event) => {
-  const target = event.target instanceof Element ? event.target : null;
-  const row = target?.closest(".swatch-tile");
-  const swatch = state.swatches.find((candidate) => candidate.id === row?.dataset.id);
-  if (!swatch) return;
-  state.selectedId = swatch.id;
-  state.currentColor = {
-    ...swatch.rgb,
-    a: 255,
-    hex: swatch.hex,
-  };
-  copyHex(swatch.hex);
-  updateStatus();
-  render();
-});
+  window.addEventListener("resize", () => {
+    syncAccordionHeights();
+  });
 
-elements.toggleContainers.addEventListener("click", () => {
-  setContainersCollapsed(!document.body.classList.contains("containers-collapsed"));
-});
+  requestAnimationFrame(() => {
+    syncAccordionHeights();
+  });
 
-elements.copyProperties?.addEventListener("click", async () => {
-  if (!elements.propertyCode?.value || elements.copyProperties.disabled) return;
-  try {
-    await navigator.clipboard.writeText(elements.propertyCode.value);
-    elements.copyProperties.textContent = "Copied";
-    window.setTimeout(() => {
-      elements.copyProperties.textContent = "Copy";
-    }, 1000);
-  } catch {
-    elements.propertyCode.focus();
+  elements.containerList.addEventListener("dragstart", (event) => {
+    const row = event.target instanceof Element ? event.target.closest(".container-row") : null;
+    if (event.target instanceof Element && event.target.closest(".container-action")) {
+      event.preventDefault();
+      return;
+    }
+    if (!row?.dataset.id) return;
+    containerDrag = row.dataset.id;
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", containerDrag);
+  });
+
+  elements.containerList.addEventListener("dragover", (event) => {
+    const row = event.target instanceof Element ? event.target.closest(".container-row") : null;
+    const target = getMeasurementById(row?.dataset.id);
+    const dragged = getMeasurementById(containerDrag);
+    if (!dragged) return;
+    event.preventDefault();
+    clearContainerDropStyles();
+    if (!row) {
+      elements.containerList.classList.add("is-drop-root");
+      return;
+    }
+    if (!target || dragged.id === target.id) return;
+    const mode = containerDropMode(event, row, target);
+    if (mode === "child" && (!canContainMeasurement(target) || isDescendantOf(target, dragged.id))) return;
+    row.classList.add(`is-drop-${mode}`);
+  });
+
+  elements.containerList.addEventListener("dragleave", (event) => {
+    if (!elements.containerList.contains(event.relatedTarget)) clearContainerDropStyles();
+  });
+
+  elements.containerList.addEventListener("drop", (event) => {
+    const row = event.target instanceof Element ? event.target.closest(".container-row") : null;
+    const target = getMeasurementById(row?.dataset.id);
+    const draggedId = containerDrag || event.dataTransfer.getData("text/plain");
+    clearContainerDropStyles();
+    containerDrag = null;
+    if (!draggedId) return;
+    event.preventDefault();
+    if (!row) {
+      unparentMeasurement(draggedId);
+      return;
+    }
+    if (!target) return;
+    reorderMeasurement(draggedId, target.id, containerDropMode(event, row, target));
+  });
+
+  elements.containerList.addEventListener("dragend", () => {
+    clearContainerDropStyles();
+    containerDrag = null;
+  });
+
+  elements.swatchList?.addEventListener("click", (event) => {
+    const target = event.target instanceof Element ? event.target : null;
+    const row = target?.closest(".swatch-tile");
+    const swatch = state.swatches.find((candidate) => candidate.id === row?.dataset.id);
+    if (!swatch) return;
+    state.selectedId = swatch.id;
+    state.currentColor = {
+      ...swatch.rgb,
+      a: 255,
+      hex: swatch.hex,
+    };
+    copyHex(swatch.hex);
+    updateStatus();
+    render();
+  });
+
+  elements.toggleContainers.addEventListener("click", () => {
+    setContainersCollapsed(!document.body.classList.contains("containers-collapsed"));
+  });
+
+  elements.copyProperties?.addEventListener("click", async () => {
+    if (!elements.propertyCode?.value || elements.copyProperties.disabled) return;
+    try {
+      await navigator.clipboard.writeText(elements.propertyCode.value);
+      elements.copyProperties.textContent = "Copied";
+      window.setTimeout(() => {
+        elements.copyProperties.textContent = "Copy";
+      }, 1000);
+    } catch {
+      elements.propertyCode.focus();
+      elements.propertyCode.select();
+    }
+  });
+
+  elements.propertyCode?.addEventListener("focus", () => {
     elements.propertyCode.select();
-  }
-});
+  });
 
-elements.propertyCode?.addEventListener("focus", () => {
-  elements.propertyCode.select();
-});
-
-setContainersCollapsed(localStorage.getItem(CONTAINERS_COLLAPSED_KEY) === "1", { persist: false, animate: false });
-
+  setContainersCollapsed(localStorage.getItem(CONTAINERS_COLLAPSED_KEY) === "1", { persist: false, animate: false });
+}

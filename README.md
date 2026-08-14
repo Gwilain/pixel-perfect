@@ -92,17 +92,24 @@ No image or measurement data is sent anywhere.
 
 ## Project Structure
 
+Scripts load in dependency order. `scheduler.js` and `core.js` depend on nothing;
+`main.js` runs the bootstrap once every other file has been declared. No file does
+any work when it loads, which is what keeps that order safe to reason about.
+
 ```text
 .
 |-- index.html
 |-- styles.css
 |-- js/
-|   |-- core.js
-|   |-- project.js
-|   |-- interaction.js
-|   |-- render.js
-|   |-- containers.js
-|   `-- events.js
+|   |-- scheduler.js    paint scheduling; every render() call goes through it
+|   |-- core.js         state, DOM handles, geometry, units, undo, storage
+|   |-- app.js          viewport, zoom and tool selection
+|   |-- project.js      image loading, capture, crop, snapping, persistence
+|   |-- interaction.js  hit testing, handles, swatches, status bar
+|   |-- render.js       canvas painting
+|   |-- containers.js   properties panel
+|   |-- events.js       pointer and keyboard handling, listener wiring
+|   `-- main.js         entry point
 `-- images/
     |-- pixel-perfect.svg
     |-- new.svg
@@ -118,16 +125,15 @@ No image or measurement data is sent anywhere.
 
 ## Deploy With GitHub Pages
 
-This project is static and can be deployed directly with GitHub Pages.
+This project is static and is deployed by the workflow in
+`.github/workflows/pages.yml`, which uploads the repository root on every push to
+`main`. There is no build step.
 
 In the GitHub repository:
 
 1. Open `Settings`.
 2. Go to `Pages`.
-3. Choose `Deploy from a branch`.
-4. Select branch `main`.
-5. Select folder `/root`.
-6. Save.
+3. Under `Source`, choose `GitHub Actions`.
 
 The site will be available at:
 
