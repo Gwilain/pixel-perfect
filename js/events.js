@@ -366,6 +366,9 @@ function keyDown(event) {
       return;
     }
     cancelAction();
+  } else if (event.key === "F2" && !isEditingField) {
+    event.preventDefault();
+    if (typeof startRenameMeasurement === "function") startRenameMeasurement(state.selectedId);
   } else if (event.key === "Delete" || event.key === "Backspace") {
     deleteSelected();
   } else if (!event.metaKey && !event.ctrlKey && !event.altKey) {
@@ -440,6 +443,11 @@ elements.loupeFrameSize.addEventListener("input", () => {
   const loupeFrameSize = clamp(Number(elements.loupeFrameSize.value), 17, 37);
   writeSettings({ ...state.settings, loupeFrameSize });
 });
+elements.remBase.addEventListener("input", () => {
+  const remBase = Number(elements.remBase.value);
+  if (!Number.isFinite(remBase) || remBase <= 0) return;
+  writeSettings({ ...state.settings, remBase: clamp(remBase, 1, 100) });
+});
 elements.smartGuides.addEventListener("change", () => {
   writeSettings({ ...state.settings, smartGuides: elements.smartGuides.checked });
 });
@@ -473,6 +481,11 @@ elements.theoryHeight.addEventListener("input", () => {
     state.theoryHeight = null;
     syncTheoryInputs();
   }
+  persist();
+  render();
+});
+elements.displayUnit.addEventListener("change", () => {
+  state.displayUnit = normalizeDisplayUnit(elements.displayUnit.value);
   persist();
   render();
 });
@@ -546,6 +559,7 @@ state.settings = readSettings();
 syncSettingsControls();
 elements.snapToGuides.checked = state.snapToGuides;
 elements.pixelPerfectMode.checked = state.pixelPerfectMode;
+elements.displayUnit.value = state.displayUnit;
 state.recentProjects = readRecentProjects();
 resizeCanvas();
 updateStatus();

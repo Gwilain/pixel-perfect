@@ -4,6 +4,9 @@ const ctx = canvas.getContext("2d", { willReadFrequently: true });
 const elements = {
   dropZone: document.querySelector("#dropZone"),
   emptyState: document.querySelector("#emptyState"),
+  containersPanel: document.querySelector(".containers-panel"),
+  toggleContainers: document.querySelector("#toggleContainers"),
+  containerList: document.querySelector("#containerList"),
   recentProjects: document.querySelector("#recentProjects"),
   recentProjectList: document.querySelector("#recentProjectList"),
   fileInput: document.querySelector("#fileInput"),
@@ -20,6 +23,7 @@ const elements = {
   importJson: document.querySelector("#importJson"),
   theoryWidth: document.querySelector("#theoryWidth"),
   theoryHeight: document.querySelector("#theoryHeight"),
+  displayUnit: document.querySelector("#displayUnit"),
   snapToGuides: document.querySelector("#snapToGuides"),
   pixelPerfectMode: document.querySelector("#pixelPerfectMode"),
   settingsButton: document.querySelector("#settingsButton"),
@@ -27,6 +31,7 @@ const elements = {
   colorSettings: [...document.querySelectorAll("[data-color-setting]")],
   loupeFrameSize: document.querySelector("#loupeFrameSize"),
   loupeFrameSizeValue: document.querySelector("#loupeFrameSizeValue"),
+  remBase: document.querySelector("#remBase"),
   smartGuides: document.querySelector("#smartGuides"),
   resetSettings: document.querySelector("#resetSettings"),
   imageInfo: document.querySelector("#imageInfo"),
@@ -44,8 +49,11 @@ const DEFAULT_SETTINGS = {
   guide: "#00D4FF",
   guideSelected: "#FF3D8B",
   loupeFrameSize: 17,
+  remBase: 16,
   smartGuides: true,
 };
+
+const DISPLAY_UNITS = new Set(["px", "rem", "percent", "viewport"]);
 
 const state = {
   image: null,
@@ -70,6 +78,7 @@ const state = {
   spacePressed: false,
   theoryWidth: null,
   theoryHeight: null,
+  displayUnit: "px",
   snapToGuides: true,
   pixelPerfectMode: true,
   settings: { ...DEFAULT_SETTINGS },
@@ -93,6 +102,7 @@ const SWATCH_GAP = 6;
 const SNAP_DISTANCE = 8;
 const SETTINGS_KEY = "pixel-perfect:settings";
 const RECENT_PROJECTS_KEY = "pixel-perfect:recent-projects";
+const CONTAINERS_COLLAPSED_KEY = "pixel-perfect:containers-collapsed";
 const DB_NAME = "pixel-perfect-db";
 const DB_VERSION = 1;
 const UNDO_LIMIT = 40;
@@ -118,9 +128,11 @@ function readSettings() {
         ]),
     );
     const loupeFrameSize = Number(payload.loupeFrameSize);
+    const remBase = Number(payload.remBase);
     return {
       ...colorSettings,
       loupeFrameSize: Number.isFinite(loupeFrameSize) ? clamp(Math.round(loupeFrameSize), 17, 37) : DEFAULT_SETTINGS.loupeFrameSize,
+      remBase: Number.isFinite(remBase) && remBase > 0 ? clamp(Math.round(remBase * 100) / 100, 1, 100) : DEFAULT_SETTINGS.remBase,
       smartGuides: typeof payload.smartGuides === "boolean" ? payload.smartGuides : DEFAULT_SETTINGS.smartGuides,
     };
   } catch {
@@ -154,6 +166,7 @@ function createUndoSnapshot(imageBlob = null) {
     viewport: { ...state.viewport },
     theoryWidth: state.theoryWidth,
     theoryHeight: state.theoryHeight,
+    displayUnit: state.displayUnit,
     snapToGuides: state.snapToGuides,
     pixelPerfectMode: state.pixelPerfectMode,
   };
@@ -196,6 +209,7 @@ function syncSettingsControls() {
   }
   elements.loupeFrameSize.value = state.settings.loupeFrameSize;
   elements.loupeFrameSizeValue.textContent = `${state.settings.loupeFrameSize}px view`;
+  elements.remBase.value = state.settings.remBase;
   elements.smartGuides.checked = state.settings.smartGuides;
 }
 
@@ -355,6 +369,77 @@ function getScaleFactor() {
   return 1;
 }
 
+function getImageBasis(axis = "x", item = null) {
+  const basisRect = getBasisRect(item);
+  if (basisRect) {
+    if (axis === "y") return basisRect.h;
+    if (axis === "diagonal") return Math.hypot(basisRect.w, basisRect.h);
+    return basisRect.w;
+  }
+  if (!state.image) return 1;
+  if (axis === "y") return state.image.height;
+  if (axis === "diagonal") return Math.hypot(state.image.width, state.image.height);
+  return state.image.width;
+}
+
+function normalizeDisplayUnit(unit) {
+  if (unit === "vw" || unit === "vh") return "viewport";
+  return DISPLAY_UNITS.has(unit) ? unit : "px";
+}
+
+function normalizeItemUnit(unit) {
+  if (unit === "inherit" || unit == null) return "inherit";
+  return normalizeDisplayUnit(unit);
+}
+
+function getMeasurementById(id) {
+  return state.measurements.find((item) => item.id === id) ?? null;
+}
+
+function isRectMeasurement(item) {
+  return item?.type === "rect";
+}
+
+function canContainMeasurement(item) {
+  return isRectMeasurement(item);
+}
+
+function effectiveDisplayUnit(item = null) {
+  const itemUnit = normalizeItemUnit(item?.unit);
+  return itemUnit === "inherit" ? normalizeDisplayUnit(state.displayUnit) : itemUnit;
+}
+
+function getParentRect(item) {
+  if (!item?.parentId) return null;
+  const parent = getMeasurementById(item.parentId);
+  return isRectMeasurement(parent) ? normalizedRect(parent) : null;
+}
+
+function getBasisRect(item = null) {
+  return getParentRect(item);
+}
+
+function sanitizeMeasurementTree() {
+  const ids = new Set(state.measurements.map((item) => item.id));
+  for (const item of state.measurements) {
+    item.unit = normalizeItemUnit(item.unit);
+    if (!item.parentId || !ids.has(item.parentId) || item.parentId === item.id) {
+      item.parentId = null;
+      continue;
+    }
+    let parent = getMeasurementById(item.parentId);
+    const seen = new Set([item.id]);
+    while (parent) {
+      if (!canContainMeasurement(parent) || seen.has(parent.id)) {
+        item.parentId = null;
+        break;
+      }
+      seen.add(parent.id);
+      parent = parent.parentId ? getMeasurementById(parent.parentId) : null;
+    }
+  }
+}
+
 function syncTheoryInputs(source = null) {
   if (!state.image) {
     elements.theoryWidth.value = state.theoryWidth ?? "";
@@ -374,12 +459,23 @@ function syncTheoryInputs(source = null) {
   elements.theoryHeight.value = state.theoryHeight ? smartRound(state.theoryHeight) : "";
 }
 
-function formatMeasureValue(value) {
+function formatMeasureValue(value, axis = "x", item = null) {
+  if (!state.image) return `${smartRound(value)} px`;
+  const unit = effectiveDisplayUnit(item);
   const scaled = value * getScaleFactor();
+  if (unit === "rem") return `${smartRound(scaled / state.settings.remBase)} rem`;
+  if (unit === "percent") return `${smartRound((value / getImageBasis(axis, item)) * 100)}%`;
+  if (unit === "viewport") {
+    const suffix = axis === "y" ? "vh" : "vw";
+    const basis = axis === "y" ? state.image.height : state.image.width;
+    return `${smartRound((value / basis) * 100)} ${suffix}`;
+  }
   return `${smartRound(scaled)} px`;
 }
 
-function formatCoord(value) {
-  return smartRound(value * getScaleFactor());
+function formatCoord(value, axis = "x", item = null) {
+  const parent = getParentRect(item);
+  const relativeValue = parent ? value - (axis === "y" ? parent.y : parent.x) : value;
+  return formatMeasureValue(relativeValue, axis, item);
 }
 

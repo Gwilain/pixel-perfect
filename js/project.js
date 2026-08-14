@@ -47,6 +47,7 @@ async function undo() {
   state.viewport = snapshot.viewport ? { ...snapshot.viewport } : state.viewport;
   state.theoryWidth = snapshot.theoryWidth;
   state.theoryHeight = snapshot.theoryHeight;
+  state.displayUnit = normalizeDisplayUnit(snapshot.displayUnit);
   state.snapToGuides = snapshot.snapToGuides;
   state.pixelPerfectMode = snapshot.pixelPerfectMode;
   state.draft = null;
@@ -55,6 +56,7 @@ async function undo() {
   state.hoverSnapPoint = null;
   elements.snapToGuides.checked = state.snapToGuides;
   elements.pixelPerfectMode.checked = state.pixelPerfectMode;
+  elements.displayUnit.value = state.displayUnit;
   syncTheoryInputs(snapshot.theoryHeight && !snapshot.theoryWidth ? "height" : "width");
   syncToolButtons();
   persist();
@@ -518,6 +520,7 @@ function persist() {
     !state.swatches.length &&
     !state.theoryWidth &&
     !state.theoryHeight &&
+    state.displayUnit === "px" &&
     !state.snapToGuides &&
     !state.pixelPerfectMode
   ) {
@@ -529,6 +532,7 @@ function persist() {
     imageSignature: state.imageSignature,
     theoryWidth: state.theoryWidth,
     theoryHeight: state.theoryHeight,
+    displayUnit: state.displayUnit,
     snapToGuides: state.snapToGuides,
     pixelPerfectMode: state.pixelPerfectMode,
     measurements: state.measurements,
@@ -545,13 +549,16 @@ function restoreFromStorage() {
     const payload = JSON.parse(raw);
     if (payload.imageSignature !== state.imageSignature) return;
     state.measurements = Array.isArray(payload.measurements) ? payload.measurements : [];
+    sanitizeMeasurementTree();
     state.guides = Array.isArray(payload.guides) ? payload.guides : [];
     state.swatches = Array.isArray(payload.swatches) ? payload.swatches : [];
     state.theoryWidth = Number.isFinite(payload.theoryWidth) ? payload.theoryWidth : null;
     state.theoryHeight = Number.isFinite(payload.theoryHeight) ? payload.theoryHeight : null;
+    state.displayUnit = normalizeDisplayUnit(payload.displayUnit);
     state.snapToGuides = typeof payload.snapToGuides === "boolean" ? payload.snapToGuides : true;
     state.pixelPerfectMode = typeof payload.pixelPerfectMode === "boolean" ? payload.pixelPerfectMode : true;
     syncTheoryInputs(state.theoryHeight && !state.theoryWidth ? "height" : "width");
+    elements.displayUnit.value = state.displayUnit;
     elements.snapToGuides.checked = state.snapToGuides;
     elements.pixelPerfectMode.checked = state.pixelPerfectMode;
   } catch {
@@ -570,6 +577,7 @@ function exportMeasurements() {
     },
     theoryWidth: state.theoryWidth,
     theoryHeight: state.theoryHeight,
+    displayUnit: state.displayUnit,
     snapToGuides: state.snapToGuides,
     pixelPerfectMode: state.pixelPerfectMode,
     measurements: state.measurements,
@@ -589,13 +597,16 @@ async function importMeasurements(file) {
   const payload = JSON.parse(await file.text());
   pushUndo();
   state.measurements = Array.isArray(payload.measurements) ? payload.measurements : [];
+  sanitizeMeasurementTree();
   state.guides = Array.isArray(payload.guides) ? payload.guides : [];
   state.swatches = Array.isArray(payload.swatches) ? payload.swatches : [];
   state.theoryWidth = Number.isFinite(payload.theoryWidth) ? payload.theoryWidth : null;
   state.theoryHeight = Number.isFinite(payload.theoryHeight) ? payload.theoryHeight : null;
+  state.displayUnit = normalizeDisplayUnit(payload.displayUnit);
   state.snapToGuides = typeof payload.snapToGuides === "boolean" ? payload.snapToGuides : true;
   state.pixelPerfectMode = typeof payload.pixelPerfectMode === "boolean" ? payload.pixelPerfectMode : true;
   syncTheoryInputs(state.theoryHeight && !state.theoryWidth ? "height" : "width");
+  elements.displayUnit.value = state.displayUnit;
   elements.snapToGuides.checked = state.snapToGuides;
   elements.pixelPerfectMode.checked = state.pixelPerfectMode;
   state.selectedId = null;

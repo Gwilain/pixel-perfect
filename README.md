@@ -14,15 +14,19 @@ It is built as a static app with plain HTML, CSS and JavaScript. There is no bac
 - Crop a captured or imported image before measuring.
 - Zoom, pan and inspect pixels at high scale.
 - Scale measurements from a theoretical width or height while preserving the image ratio.
+- Display measurement labels as `px`, `rem`, `%` or viewport units (`vw` horizontally and `vh` vertically).
+- Organize rectangles and distances in a Containers panel with parent-relative percentages.
 - Measure rectangles with width, height and image coordinates.
 - Measure distances with horizontal, vertical and total distance.
 - Edit existing rectangles with handles.
 - Edit existing distances by moving endpoints.
+- Reorder and parent measurements from the Containers panel.
 - Add draggable guides from the top and left rulers.
 - Optional `Snap to guides` for rectangles and distances.
 - Smart guides for temporary alignment with existing rectangle edges and distance points.
 - Optional `Pixel perfect` mode with a cursor loupe and whole-pixel snapping for rectangles and distances.
 - Custom colors for rectangles, distances, guides and their selected states.
+- Custom `rem` base for converted measurement labels.
 - Adjustable loupe frame size for pixel-perfect inspection.
 - Pick colors with the eyedropper.
 - Keep copied color swatches and copy them again by clicking.
@@ -94,6 +98,7 @@ No image or measurement data is sent anywhere.
 |   |-- project.js
 |   |-- interaction.js
 |   |-- render.js
+|   |-- containers.js
 |   `-- events.js
 `-- images/
     |-- pixel-perfect.svg

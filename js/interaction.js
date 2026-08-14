@@ -343,8 +343,12 @@ function hitTest(screenPoint) {
 
 function deleteSelected() {
   if (!state.selectedId) return;
+  const deletedId = state.selectedId;
   pushUndo();
   state.measurements = state.measurements.filter((item) => item.id !== state.selectedId);
+  for (const item of state.measurements) {
+    if (item.parentId === deletedId) item.parentId = null;
+  }
   state.guides = state.guides.filter((item) => item.id !== state.selectedId);
   state.swatches = state.swatches.filter((item) => item.id !== state.selectedId);
   if (state.crop?.id === state.selectedId) state.crop = null;

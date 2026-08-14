@@ -52,6 +52,15 @@
           Theo H
           <input id="theoryHeight" type="number" min="1" step="1" placeholder="px" />
         </label>
+        <label class="theory" title="Unit used in measurement labels">
+          Unit
+          <select id="displayUnit">
+            <option value="px">px</option>
+            <option value="rem">rem</option>
+            <option value="percent">%</option>
+            <option value="viewport">vw / vh</option>
+          </select>
+        </label>
         <label class="toggle" title="Show a loupe and snap rectangle and distance points to whole pixels">
           <input id="pixelPerfectMode" type="checkbox" />
           Pixel perfect
@@ -96,6 +105,11 @@
               <input id="loupeFrameSize" type="range" min="17" max="37" step="2" />
               <output id="loupeFrameSizeValue"></output>
             </label>
+            <div class="settings-title settings-title-spaced">Units</div>
+            <label>
+              Rem base
+              <input id="remBase" type="number" min="1" step="1" />
+            </label>
             <label class="toggle setting-toggle" title="Temporarily align measurements with other rectangle edges and distance points">
               <input id="smartGuides" type="checkbox" />
               Smart guides
@@ -122,6 +136,18 @@
       </section>
     </main>
 
+    <aside class="containers-panel" aria-label="Containers">
+      <div class="containers-header">
+        <span>Containers</span>
+        <button id="toggleContainers" type="button" title="Collapse containers" aria-label="Collapse containers">
+          <svg viewBox="0 0 24 24" aria-hidden="true">
+            <path d="M15 6l-6 6 6 6" />
+          </svg>
+        </button>
+      </div>
+      <div id="containerList" class="container-list"></div>
+    </aside>
+
     <footer class="statusbar">
       <span id="imageInfo">Image: -</span>
       <span class="zoom-control">
@@ -138,6 +164,7 @@
     <script defer src="./js/project.js"></script>
     <script defer src="./js/interaction.js"></script>
     <script defer src="./js/render.js"></script>
+    <script defer src="./js/containers.js"></script>
     <script defer src="./js/events.js"></script>
   </body>
 </html>

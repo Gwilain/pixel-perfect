@@ -33,7 +33,12 @@ body {
 
 body {
   display: grid;
+  grid-template-columns: minmax(0, 1fr) 280px;
   grid-template-rows: auto 1fr auto;
+}
+
+body.containers-collapsed {
+  grid-template-columns: minmax(0, 1fr) 42px;
 }
 
 button,
@@ -52,6 +57,7 @@ input {
 }
 
 .toolbar {
+  grid-column: 1 / -1;
   height: 46px;
   padding: 6px 10px;
   border-bottom: 1px solid var(--line);
@@ -65,6 +71,7 @@ input {
 }
 
 .statusbar {
+  grid-column: 1 / -1;
   height: 30px;
   padding: 4px 10px;
   border-top: 1px solid var(--line);
@@ -270,7 +277,8 @@ button.is-active,
   accent-color: var(--accent);
 }
 
-.theory input {
+.theory input,
+.theory select {
   width: 78px;
   height: 30px;
   border: 1px solid var(--line);
@@ -280,8 +288,23 @@ button.is-active,
   padding: 0 8px;
 }
 
+.theory select {
+  width: 64px;
+}
+
+.settings-panel input[type="number"] {
+  width: 76px;
+  height: 26px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: #0f1114;
+  color: var(--text);
+  padding: 0 8px;
+}
+
 .workspace {
   position: relative;
+  grid-column: 1;
   min-width: 0;
   min-height: 0;
   overflow: hidden;
@@ -295,6 +318,154 @@ button.is-active,
     linear-gradient(45deg, rgba(255, 255, 255, 0.035) 25%, transparent 25%) 12px
       12px / 24px 24px,
     #0b0d10;
+}
+
+.containers-panel {
+  grid-column: 2;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+  border-left: 1px solid var(--line);
+  background: #15181c;
+}
+
+.containers-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  height: 34px;
+  padding: 0 10px;
+  border-bottom: 1px solid var(--line);
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 650;
+  text-transform: uppercase;
+}
+
+#settingsButton,
+#toggleContainers {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  min-width: 32px;
+  height: 30px;
+  padding: 0;
+}
+
+#toggleContainers svg {
+  width: 18px;
+  height: 18px;
+}
+
+#toggleContainers path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 2;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+body.containers-collapsed .containers-header {
+  justify-content: center;
+  height: 46px;
+  padding: 0;
+}
+
+body.containers-collapsed .containers-header span,
+body.containers-collapsed .container-list {
+  display: none;
+}
+
+body.containers-collapsed #toggleContainers {
+  transform: rotate(180deg);
+}
+
+.container-list {
+  height: calc(100% - 34px);
+  overflow: auto;
+  padding: 6px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+}
+
+.container-list.is-drop-root {
+  border-color: var(--accent);
+  background: rgba(69, 208, 160, 0.06);
+}
+
+.container-empty {
+  padding: 10px 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.container-row {
+  display: grid;
+  grid-template-columns: 18px minmax(0, 1fr) 72px;
+  align-items: center;
+  gap: 6px;
+  min-height: 30px;
+  margin-bottom: 2px;
+  padding: 3px 6px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.container-row:hover {
+  background: #20242a;
+}
+
+.container-row.is-selected {
+  border-color: color-mix(in srgb, var(--accent) 70%, white 10%);
+  background: color-mix(in srgb, var(--accent) 18%, #20242a);
+}
+
+.container-row.is-drop-before {
+  border-top-color: var(--accent);
+}
+
+.container-row.is-drop-after {
+  border-bottom-color: var(--accent);
+}
+
+.container-row.is-drop-child {
+  border-color: var(--accent);
+}
+
+.container-icon {
+  color: var(--muted);
+  text-align: center;
+}
+
+.container-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.container-name-input {
+  width: 100%;
+  height: 24px;
+  min-width: 0;
+  border: 1px solid var(--accent);
+  border-radius: 5px;
+  background: #0f1114;
+  color: var(--text);
+  padding: 0 6px;
+}
+
+.container-unit {
+  width: 72px;
+  height: 24px;
+  border: 1px solid var(--line);
+  border-radius: 5px;
+  background: #0f1114;
+  color: var(--text);
+  font-size: 12px;
 }
 
 #stage {

@@ -100,14 +100,14 @@ function drawGuides() {
       start.y = 0;
       end.x = x;
       end.y = size.height;
-      drawLabel(`x ${Math.round(guide.value)}`, x + 6, RULER_SIZE + 18, selected, state.settings.guideSelected);
+      drawLabel(`x ${formatCoord(guide.value, "x")}`, x + 6, RULER_SIZE + 18, selected, state.settings.guideSelected);
     } else {
       const y = toScreenPoint({ x: 0, y: guide.value }).y;
       start.x = 0;
       start.y = y;
       end.x = size.width;
       end.y = y;
-      drawLabel(`y ${Math.round(guide.value)}`, RULER_SIZE + 8, y + 18, selected, state.settings.guideSelected);
+      drawLabel(`y ${formatCoord(guide.value, "y")}`, RULER_SIZE + 8, y + 18, selected, state.settings.guideSelected);
     }
     const crispStart = { ...start };
     const crispEnd = { ...end };
@@ -186,7 +186,7 @@ function drawRectMeasurement(item) {
   ctx.stroke();
   const guideText = nearestGuideText(rect);
   drawLabel(
-    `${formatMeasureValue(rect.w)} x ${formatMeasureValue(rect.h)} | X ${formatCoord(rect.x)} Y ${formatCoord(rect.y)}${guideText}`,
+    `${formatMeasureValue(rect.w, "x", item)} x ${formatMeasureValue(rect.h, "y", item)} | X ${formatCoord(rect.x, "x", item)} Y ${formatCoord(rect.y, "y", item)}${guideText}`,
     topLeft.x + 8,
     topLeft.y - 10,
     selected,
@@ -212,8 +212,11 @@ function drawDistanceMeasurement(item) {
   ctx.stroke();
   drawPoint(a.x, a.y);
   drawPoint(b.x, b.y);
+  const label = effectiveDisplayUnit(item) === "viewport"
+    ? `DX ${formatMeasureValue(Math.abs(dx), "x", item)} | DY ${formatMeasureValue(Math.abs(dy), "y", item)}`
+    : `DX ${formatMeasureValue(Math.abs(dx), "x", item)} | DY ${formatMeasureValue(Math.abs(dy), "y", item)} | D ${formatMeasureValue(Math.hypot(dx, dy), "diagonal", item)}`;
   drawLabel(
-    `DX ${formatMeasureValue(Math.abs(dx))} | DY ${formatMeasureValue(Math.abs(dy))} | D ${formatMeasureValue(Math.hypot(dx, dy))}`,
+    label,
     (a.x + b.x) / 2 + 8,
     (a.y + b.y) / 2 - 8,
     selected,
@@ -349,7 +352,7 @@ function nearestGuideText(rect) {
     })
     .sort((a, b) => a.min - b.min)[0];
   if (!nearest || nearest.min > 500) return "";
-  return ` | guide ${formatMeasureValue(nearest.min)}`;
+  return ` | guide ${formatMeasureValue(nearest.min, nearest.guide.orientation === "vertical" ? "x" : "y")}`;
 }
 
 function drawPoint(x, y) {
@@ -616,5 +619,6 @@ function render() {
   drawCopyToast();
   if (state.hoverScreen) drawLoupe(state.hoverScreen);
   elements.applyCrop.hidden = state.tool !== "crop" || !state.crop;
+  if (typeof renderContainersPanel === "function") renderContainersPanel();
 }
 
