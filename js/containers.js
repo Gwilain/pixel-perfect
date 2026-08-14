@@ -12,7 +12,7 @@ function setContainersCollapsed(collapsed, options = {}) {
   elements.toggleContainers.title = collapsed ? "Expand containers" : "Collapse containers";
   elements.toggleContainers.setAttribute("aria-label", elements.toggleContainers.title);
   elements.toggleContainers.setAttribute("aria-expanded", String(!collapsed));
-  if (options.persist !== false) localStorage.setItem(CONTAINERS_COLLAPSED_KEY, collapsed ? "1" : "0");
+  if (options.persist !== false) writeStorageValue(CONTAINERS_COLLAPSED_KEY, collapsed ? "1" : "0");
   resizeCanvas();
 }
 
@@ -146,27 +146,12 @@ function startRenameMeasurement(id) {
   input.addEventListener("blur", commit);
 }
 
-function cssNumber(value) {
-  return String(smartRound(value)).replace(",", ".");
-}
-
 function cssMeasureValue(value, axis = "x", item = null) {
-  if (!state.image) return `${cssNumber(value)}px`;
-  const unit = effectiveDisplayUnit(item);
-  const scaled = value * getScaleFactor();
-  if (unit === "rem") return `${cssNumber(scaled / state.settings.remBase)}rem`;
-  if (unit === "percent") return `${cssNumber((value / getImageBasis(axis, item)) * 100)}%`;
-  if (unit === "viewport") {
-    const basis = axis === "y" ? state.image.height : state.image.width;
-    return `${cssNumber((value / basis) * 100)}${axis === "y" ? "vh" : "vw"}`;
-  }
-  return `${cssNumber(scaled)}px`;
+  return `${displayNumber(toDisplayValue(value, axis, item))}${displayUnitSuffix(axis, item)}`;
 }
 
 function cssCoordValue(value, axis = "x", item = null) {
-  const parent = getParentRect(item);
-  const relativeValue = parent ? value - (axis === "y" ? parent.y : parent.x) : value;
-  return cssMeasureValue(relativeValue, axis, item);
+  return `${displayNumber(toDisplayCoord(value, axis, item))}${displayUnitSuffix(axis, item)}`;
 }
 
 function cssRadiusValue(item) {
@@ -273,47 +258,6 @@ function geometryFromItem(item) {
   return null;
 }
 
-function panelNumber(value) {
-  return String(smartRound(value)).replace(",", ".");
-}
-
-function panelMeasureValue(value, axis = "x", item = null) {
-  if (!state.image) return value;
-  const unit = effectiveDisplayUnit(item);
-  const scaled = value * getScaleFactor();
-  if (unit === "rem") return scaled / state.settings.remBase;
-  if (unit === "percent") return (value / getImageBasis(axis, item)) * 100;
-  if (unit === "viewport") {
-    const basis = axis === "y" ? state.image.height : state.image.width;
-    return (value / basis) * 100;
-  }
-  return scaled;
-}
-
-function panelCoordValue(value, axis = "x", item = null) {
-  const parent = getParentRect(item);
-  const relativeValue = parent ? value - (axis === "y" ? parent.y : parent.x) : value;
-  return panelMeasureValue(relativeValue, axis, item);
-}
-
-function imageMeasureFromPanel(value, axis = "x", item = null) {
-  if (!state.image) return value;
-  const unit = effectiveDisplayUnit(item);
-  if (unit === "rem") return (value * state.settings.remBase) / getScaleFactor();
-  if (unit === "percent") return (value / 100) * getImageBasis(axis, item);
-  if (unit === "viewport") {
-    const basis = axis === "y" ? state.image.height : state.image.width;
-    return (value / 100) * basis;
-  }
-  return value / getScaleFactor();
-}
-
-function imageCoordFromPanel(value, axis = "x", item = null) {
-  const parent = getParentRect(item);
-  const absoluteValue = imageMeasureFromPanel(value, axis, item);
-  return parent ? absoluteValue + (axis === "y" ? parent.y : parent.x) : absoluteValue;
-}
-
 // Writes a control without stealing what the user is currently typing. A viewport
 // drag always wins, so canvas edits keep the panel live even if a field holds focus.
 function setControlValue(input, value) {
@@ -356,10 +300,10 @@ function renderGeometryControls() {
     if (elements.geometryUnit) elements.geometryUnit.textContent = "";
     return;
   }
-  setControlValue(inputs.x, panelNumber(panelCoordValue(geometry.x, "x", item)));
-  setControlValue(inputs.y, panelNumber(panelCoordValue(geometry.y, "y", item)));
-  setControlValue(inputs.w, panelNumber(panelMeasureValue(geometry.w, "x", item)));
-  setControlValue(inputs.h, panelNumber(panelMeasureValue(geometry.h, "y", item)));
+  setControlValue(inputs.x, displayNumber(toDisplayCoord(geometry.x, "x", item)));
+  setControlValue(inputs.y, displayNumber(toDisplayCoord(geometry.y, "y", item)));
+  setControlValue(inputs.w, displayNumber(toDisplayValue(geometry.w, "x", item)));
+  setControlValue(inputs.h, displayNumber(toDisplayValue(geometry.h, "y", item)));
   if (elements.geometryUnit) {
     const unit = effectiveDisplayUnit(item);
     const geometryUnit = unit === "viewport" ? "X/W vw | Y/H vh" : unit === "percent" ? "%" : unit;
@@ -381,10 +325,10 @@ function renderRadiusControls() {
     return;
   }
   const radii = rectRadii(item);
-  setControlValue(inputs.tl, panelNumber(radii.tl));
-  setControlValue(inputs.tr, panelNumber(radii.tr));
-  setControlValue(inputs.br, panelNumber(radii.br));
-  setControlValue(inputs.bl, panelNumber(radii.bl));
+  setControlValue(inputs.tl, displayNumber(radii.tl));
+  setControlValue(inputs.tr, displayNumber(radii.tr));
+  setControlValue(inputs.br, displayNumber(radii.br));
+  setControlValue(inputs.bl, displayNumber(radii.bl));
 }
 
 function renderPaddingControls() {
@@ -401,10 +345,10 @@ function renderPaddingControls() {
     return;
   }
   const padding = rectPadding(item);
-  setControlValue(inputs.top, panelNumber(padding.top));
-  setControlValue(inputs.right, panelNumber(padding.right));
-  setControlValue(inputs.bottom, panelNumber(padding.bottom));
-  setControlValue(inputs.left, panelNumber(padding.left));
+  setControlValue(inputs.top, displayNumber(padding.top));
+  setControlValue(inputs.right, displayNumber(padding.right));
+  setControlValue(inputs.bottom, displayNumber(padding.bottom));
+  setControlValue(inputs.left, displayNumber(padding.left));
 }
 
 function updateModeButtons(buttons, activeMode) {
@@ -461,10 +405,10 @@ function applyGeometryControls(options = {}) {
   }
 
   const next = {
-    x: imageCoordFromPanel(values.x, "x", item),
-    y: imageCoordFromPanel(values.y, "y", item),
-    w: Math.max(0, imageMeasureFromPanel(values.w, "x", item)),
-    h: Math.max(0, imageMeasureFromPanel(values.h, "y", item)),
+    x: fromDisplayCoord(values.x, "x", item),
+    y: fromDisplayCoord(values.y, "y", item),
+    w: Math.max(0, fromDisplayValue(values.w, "x", item)),
+    h: Math.max(0, fromDisplayValue(values.h, "y", item)),
   };
   const current = geometryFromItem(item);
   if (!current || (

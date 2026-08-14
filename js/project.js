@@ -81,7 +81,13 @@ function hasFileDrop(dataTransfer) {
 
 async function loadImageBlob(blob, name, options = {}) {
   if (!blob || !blob.type.startsWith("image/")) return;
-  const bitmap = await createImageBitmap(blob);
+  let bitmap = null;
+  try {
+    bitmap = await createImageBitmap(blob);
+  } catch {
+    elements.hintInfo.textContent = "This image could not be decoded.";
+    return;
+  }
   state.image = bitmap;
   state.imageName = name;
   state.imageSignature = `${name}:${blob.size}:${bitmap.width}x${bitmap.height}`;
@@ -200,10 +206,21 @@ async function getImageRecord(id) {
   return record;
 }
 
+async function deleteImageRecord(id) {
+  const db = await openProjectDatabase();
+  await new Promise((resolve, reject) => {
+    const tx = db.transaction("images", "readwrite");
+    tx.objectStore("images").delete(id);
+    tx.oncomplete = () => resolve();
+    tx.onerror = () => reject(tx.error);
+  });
+  db.close();
+}
+
 function readRecentProjects() {
   try {
     const projects = JSON.parse(localStorage.getItem(RECENT_PROJECTS_KEY) ?? "[]");
-    return Array.isArray(projects) ? projects.slice(0, 3) : [];
+    return Array.isArray(projects) ? projects.slice(0, RECENT_PROJECT_LIMIT) : [];
   } catch {
     localStorage.removeItem(RECENT_PROJECTS_KEY);
     return [];
@@ -211,8 +228,14 @@ function readRecentProjects() {
 }
 
 function writeRecentProjects(projects) {
-  state.recentProjects = projects.slice(0, 3);
-  localStorage.setItem(RECENT_PROJECTS_KEY, JSON.stringify(state.recentProjects));
+  const previousIds = state.recentProjects.map((project) => project.id);
+  state.recentProjects = projects.slice(0, RECENT_PROJECT_LIMIT);
+  const keptIds = new Set(state.recentProjects.map((project) => project.id));
+  writeStorageValue(RECENT_PROJECTS_KEY, JSON.stringify(state.recentProjects));
+  // Evicted projects used to leave their full-size blob in IndexedDB forever.
+  for (const id of previousIds) {
+    if (!keptIds.has(id)) void deleteImageRecord(id).catch(() => {});
+  }
   renderRecentProjects();
 }
 
@@ -233,16 +256,28 @@ function createThumbnail() {
 async function saveRecentProject(blob, name, width, height) {
   const id = state.imageSignature;
   const thumbnail = createThumbnail();
-  await putImageRecord({ id, blob, name, width, height, type: blob.type, updatedAt: Date.now() });
+  try {
+    await putImageRecord({ id, blob, name, width, height, type: blob.type, updatedAt: Date.now() });
+  } catch {
+    // Private browsing or a full disk: the image is loaded, it just is not remembered.
+    elements.hintInfo.textContent = "This project could not be added to recents.";
+    return;
+  }
   const nextProjects = [
     { id, name, width, height, thumbnail, updatedAt: Date.now() },
     ...state.recentProjects.filter((project) => project.id !== id),
-  ].slice(0, 3);
+  ].slice(0, RECENT_PROJECT_LIMIT);
   writeRecentProjects(nextProjects);
 }
 
 async function reopenRecentProject(id) {
-  const record = await getImageRecord(id);
+  let record = null;
+  try {
+    record = await getImageRecord(id);
+  } catch {
+    elements.hintInfo.textContent = "This project could not be reopened.";
+    return;
+  }
   if (!record) {
     writeRecentProjects(state.recentProjects.filter((project) => project.id !== id));
     return;
@@ -513,23 +548,32 @@ function snapMovedRect(original, dx, dy, options = {}) {
   return { dx: nextDx, dy: nextDy };
 }
 
+// True when the project holds anything worth saving. The previous form required
+// snapToGuides and pixelPerfectMode to both be false, which they never are by
+// default, so the cleanup branch below could never run and empty projects piled up.
+function hasStoredProjectData() {
+  return Boolean(
+    state.measurements.length ||
+      state.guides.length ||
+      state.swatches.length ||
+      state.theoryWidth ||
+      state.theoryHeight ||
+      state.displayUnit !== "px" ||
+      !state.snapToGuides ||
+      !state.pixelPerfectMode,
+  );
+}
+
 function persist() {
   if (!state.imageSignature) return;
-  if (
-    !state.measurements.length &&
-    !state.guides.length &&
-    !state.swatches.length &&
-    !state.theoryWidth &&
-    !state.theoryHeight &&
-    state.displayUnit === "px" &&
-    !state.snapToGuides &&
-    !state.pixelPerfectMode
-  ) {
-    localStorage.removeItem(`pixel-measure:${state.imageSignature}`);
+  localStorage.removeItem(legacyMeasureKey());
+  if (!hasStoredProjectData()) {
+    localStorage.removeItem(measureKey());
     return;
   }
   const payload = {
-    version: 1,
+    version: 2,
+    updatedAt: Date.now(),
     imageSignature: state.imageSignature,
     theoryWidth: state.theoryWidth,
     theoryHeight: state.theoryHeight,
@@ -540,7 +584,8 @@ function persist() {
     guides: state.guides,
     swatches: state.swatches,
   };
-  localStorage.setItem(`pixel-measure:${state.imageSignature}`, JSON.stringify(payload));
+  writeStorageValue(measureKey(), JSON.stringify(payload));
+  trimStoredProjects();
 }
 
 function applyProjectPayload(payload) {
@@ -560,14 +605,17 @@ function applyProjectPayload(payload) {
 }
 
 function restoreFromStorage() {
-  const raw = localStorage.getItem(`pixel-measure:${state.imageSignature}`);
+  // Projects saved before the prefix was unified still load; persist() then
+  // rewrites them under the new key and drops the legacy one.
+  const raw = localStorage.getItem(measureKey()) ?? localStorage.getItem(legacyMeasureKey());
   if (!raw) return;
   try {
     const payload = JSON.parse(raw);
     if (payload.imageSignature !== state.imageSignature) return;
     applyProjectPayload(payload);
   } catch {
-    localStorage.removeItem(`pixel-measure:${state.imageSignature}`);
+    localStorage.removeItem(measureKey());
+    localStorage.removeItem(legacyMeasureKey());
   }
 }
 

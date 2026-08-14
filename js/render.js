@@ -310,10 +310,10 @@ function drawPaddingBadges(item, padding, topLeft, bottomRight) {
   const centerX = (topLeft.x + bottomRight.x) / 2;
   const centerY = (topLeft.y + bottomRight.y) / 2;
   const labels = [
-    padding.top ? { text: panelNumber(panelMeasureValue(padding.top, "y", item)), x: centerX, y: topLeft.y - 8, anchor: "bottom" } : null,
-    padding.right ? { text: panelNumber(panelMeasureValue(padding.right, "x", item)), x: bottomRight.x + 7, y: centerY, anchor: "left" } : null,
-    padding.bottom ? { text: panelNumber(panelMeasureValue(padding.bottom, "y", item)), x: centerX, y: bottomRight.y + 8, anchor: "top" } : null,
-    padding.left ? { text: panelNumber(panelMeasureValue(padding.left, "x", item)), x: topLeft.x - 7, y: centerY, anchor: "right" } : null,
+    padding.top ? { text: displayNumber(toDisplayValue(padding.top, "y", item)), x: centerX, y: topLeft.y - 8, anchor: "bottom" } : null,
+    padding.right ? { text: displayNumber(toDisplayValue(padding.right, "x", item)), x: bottomRight.x + 7, y: centerY, anchor: "left" } : null,
+    padding.bottom ? { text: displayNumber(toDisplayValue(padding.bottom, "y", item)), x: centerX, y: bottomRight.y + 8, anchor: "top" } : null,
+    padding.left ? { text: displayNumber(toDisplayValue(padding.left, "x", item)), x: topLeft.x - 7, y: centerY, anchor: "right" } : null,
   ].filter(Boolean);
   for (const label of labels) drawPaddingBadge(label);
 }

@@ -136,6 +136,10 @@ const SNAP_DISTANCE = 8;
 const SETTINGS_KEY = "pixel-perfect:settings";
 const RECENT_PROJECTS_KEY = "pixel-perfect:recent-projects";
 const CONTAINERS_COLLAPSED_KEY = "pixel-perfect:containers-collapsed";
+const MEASURE_KEY_PREFIX = "pixel-perfect:measure:";
+const LEGACY_MEASURE_KEY_PREFIX = "pixel-measure:";
+const MEASURE_LIMIT = 20;
+const RECENT_PROJECT_LIMIT = 3;
 const DB_NAME = "pixel-perfect-db";
 const DB_VERSION = 1;
 const UNDO_LIMIT = 40;
@@ -152,6 +156,70 @@ function hexToRgb(hex) {
 function colorAlpha(hex, alpha) {
   const { r, g, b } = hexToRgb(isHexColor(hex) ? hex : DEFAULT_SETTINGS.rect);
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
+}
+
+// ---------------------------------------------------------------------------
+// localStorage. Saved projects are the only store that grows without bound, so
+// they are both capped and the first thing dropped when the quota is reached.
+// ---------------------------------------------------------------------------
+
+function measureKey(signature = state.imageSignature) {
+  return `${MEASURE_KEY_PREFIX}${signature}`;
+}
+
+function legacyMeasureKey(signature = state.imageSignature) {
+  return `${LEGACY_MEASURE_KEY_PREFIX}${signature}`;
+}
+
+function isQuotaError(error) {
+  return error?.name === "QuotaExceededError" || error?.name === "NS_ERROR_DOM_QUOTA_REACHED" || error?.code === 22;
+}
+
+function measureKeys() {
+  const keys = [];
+  for (let index = 0; index < localStorage.length; index += 1) {
+    const key = localStorage.key(index);
+    if (key?.startsWith(MEASURE_KEY_PREFIX) || key?.startsWith(LEGACY_MEASURE_KEY_PREFIX)) keys.push(key);
+  }
+  return keys;
+}
+
+function measureTimestamp(key) {
+  try {
+    return JSON.parse(localStorage.getItem(key) ?? "{}").updatedAt ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
+function measureKeysByAge() {
+  return measureKeys()
+    .map((key) => ({ key, updatedAt: measureTimestamp(key) }))
+    .sort((a, b) => a.updatedAt - b.updatedAt);
+}
+
+// Returns false instead of throwing: a failed save must never interrupt an edit.
+function writeStorageValue(key, value) {
+  let evictable = null;
+  for (;;) {
+    try {
+      localStorage.setItem(key, value);
+      return true;
+    } catch (error) {
+      if (!isQuotaError(error)) return false;
+      evictable ??= measureKeysByAge().filter((entry) => entry.key !== key);
+      const oldest = evictable.shift();
+      if (!oldest) return false;
+      localStorage.removeItem(oldest.key);
+    }
+  }
+}
+
+function trimStoredProjects() {
+  const entries = measureKeysByAge();
+  for (const entry of entries.slice(0, Math.max(0, entries.length - MEASURE_LIMIT))) {
+    localStorage.removeItem(entry.key);
+  }
 }
 
 function readSettings() {
@@ -181,7 +249,7 @@ function readSettings() {
 
 function writeSettings(settings) {
   state.settings = { ...DEFAULT_SETTINGS, ...settings };
-  localStorage.setItem(SETTINGS_KEY, JSON.stringify(state.settings));
+  writeStorageValue(SETTINGS_KEY, JSON.stringify(state.settings));
   syncSettingsControls();
   render();
 }
@@ -579,23 +647,77 @@ function syncTheoryInputs(source = null) {
   elements.theoryHeight.value = state.theoryHeight ? smartRound(state.theoryHeight) : "";
 }
 
-function formatMeasureValue(value, axis = "x", item = null) {
-  if (!state.image) return `${smartRound(value)} px`;
+// ---------------------------------------------------------------------------
+// Unit conversion. Single source of truth: everything that shows or reads a
+// length goes through these four functions. Canvas labels, CSS output and the
+// panel fields only differ in how they format the result, never in how they
+// convert it.
+// ---------------------------------------------------------------------------
+
+function viewportBasis(axis = "x") {
+  return axis === "y" ? state.image.height : state.image.width;
+}
+
+// Image-space length -> display unit of `item`.
+function toDisplayValue(value, axis = "x", item = null) {
+  if (!state.image) return value;
   const unit = effectiveDisplayUnit(item);
-  const scaled = value * getScaleFactor();
-  if (unit === "rem") return `${smartRound(scaled / state.settings.remBase)} rem`;
-  if (unit === "percent") return `${smartRound((value / getImageBasis(axis, item)) * 100)}%`;
-  if (unit === "viewport") {
-    const suffix = axis === "y" ? "vh" : "vw";
-    const basis = axis === "y" ? state.image.height : state.image.width;
-    return `${smartRound((value / basis) * 100)} ${suffix}`;
-  }
-  return `${smartRound(scaled)} px`;
+  if (unit === "rem") return (value * getScaleFactor()) / state.settings.remBase;
+  if (unit === "percent") return (value / getImageBasis(axis, item)) * 100;
+  if (unit === "viewport") return (value / viewportBasis(axis)) * 100;
+  return value * getScaleFactor();
+}
+
+// Display unit of `item` -> image-space length. Inverse of toDisplayValue.
+function fromDisplayValue(value, axis = "x", item = null) {
+  if (!state.image) return value;
+  const unit = effectiveDisplayUnit(item);
+  if (unit === "rem") return (value * state.settings.remBase) / getScaleFactor();
+  if (unit === "percent") return (value / 100) * getImageBasis(axis, item);
+  if (unit === "viewport") return (value / 100) * viewportBasis(axis);
+  return value / getScaleFactor();
+}
+
+// Coordinates are the same conversion, relative to the parent content box.
+function parentOrigin(axis = "x", item = null) {
+  const parent = getParentRect(item);
+  if (!parent) return 0;
+  return axis === "y" ? parent.y : parent.x;
+}
+
+function toDisplayCoord(value, axis = "x", item = null) {
+  return toDisplayValue(value - parentOrigin(axis, item), axis, item);
+}
+
+function fromDisplayCoord(value, axis = "x", item = null) {
+  return fromDisplayValue(value, axis, item) + parentOrigin(axis, item);
+}
+
+function displayUnitSuffix(axis = "x", item = null) {
+  if (!state.image) return "px";
+  const unit = effectiveDisplayUnit(item);
+  if (unit === "rem") return "rem";
+  if (unit === "percent") return "%";
+  if (unit === "viewport") return axis === "y" ? "vh" : "vw";
+  return "px";
+}
+
+// Shared numeric rendering for CSS output and panel fields.
+function displayNumber(value) {
+  return String(smartRound(value)).replace(",", ".");
+}
+
+// Canvas labels: "12 px", "1.5 rem", "50%".
+function formatWithUnit(shown, axis, item) {
+  const suffix = displayUnitSuffix(axis, item);
+  return suffix === "%" ? `${shown}%` : `${shown} ${suffix}`;
+}
+
+function formatMeasureValue(value, axis = "x", item = null) {
+  return formatWithUnit(smartRound(toDisplayValue(value, axis, item)), axis, item);
 }
 
 function formatCoord(value, axis = "x", item = null) {
-  const parent = getParentRect(item);
-  const relativeValue = parent ? value - (axis === "y" ? parent.y : parent.x) : value;
-  return formatMeasureValue(relativeValue, axis, item);
+  return formatWithUnit(smartRound(toDisplayCoord(value, axis, item)), axis, item);
 }
 
