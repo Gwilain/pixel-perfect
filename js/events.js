@@ -119,7 +119,7 @@ function pointerDown(event) {
 
   if (state.tool === "rect" && imageBoundsContain(imagePoint)) {
     const snappedPoint = snapMeasurementPoint(imagePoint);
-    state.draft = { id: "draft", type: "rect", x: snappedPoint.x, y: snappedPoint.y, w: 0, h: 0 };
+    state.draft = { id: "draft", type: "rect", x: snappedPoint.x, y: snappedPoint.y, w: 0, h: 0, radiusMode: "all", paddingMode: "all" };
     state.drag = { type: "drawRect", start: snappedPoint, undoSnapshot: createUndoSnapshot() };
   }
 
@@ -271,6 +271,15 @@ function pointerMove(event) {
     );
   }
 
+  if (state.drag?.type === "paddingHandle") {
+    applyPaddingHandle(
+      state.drag.item,
+      state.drag.handle,
+      state.drag.original,
+      snapPointToPixel(imagePoint),
+    );
+  }
+
   if (state.drag?.type === "distanceHandle") {
     const item = state.drag.item;
     const other = state.drag.handle === "a" ? item.b : item.a;
@@ -296,7 +305,7 @@ function pointerUp() {
     const rect = normalizedRect(state.draft);
     if (rect.w >= 1 || rect.h >= 1) {
       pushExistingUndo(state.drag.undoSnapshot);
-      state.draft = { id: uid(), type: "rect", ...rect };
+      state.draft = { id: uid(), type: "rect", ...rect, radiusMode: "all", paddingMode: "all" };
       state.measurements.push(state.draft);
       state.selectedId = state.draft.id;
       persist();
@@ -320,6 +329,7 @@ function pointerUp() {
     state.drag?.type === "guide" ||
     state.drag?.type === "rectHandle" ||
     state.drag?.type === "radiusHandle" ||
+    state.drag?.type === "paddingHandle" ||
     state.drag?.type === "distanceHandle"
   ) {
     const finalItem = state.drag.item.id === "crop"
@@ -372,6 +382,10 @@ function keyDown(event) {
     event.preventDefault();
     setActualZoom();
   } else if (event.key === "Escape") {
+    if (!elements.captureOverlay.hidden) {
+      setCapturePanelOpen(false);
+      return;
+    }
     if (!elements.infoOverlay.hidden) {
       setInfoPanelOpen(false);
       return;
@@ -416,7 +430,19 @@ elements.newButton.addEventListener("click", async () => {
   resetProject();
 });
 elements.openButton.addEventListener("click", () => elements.fileInput.click());
-elements.captureButton.addEventListener("click", captureScreen);
+elements.captureButton.addEventListener("click", () => {
+  setSettingsPanelOpen(false);
+  setInfoPanelOpen(false);
+  setCapturePanelOpen(true);
+});
+elements.startCapture.addEventListener("click", () => {
+  setCapturePanelOpen(false);
+  captureScreen();
+});
+elements.cancelCapture.addEventListener("click", () => setCapturePanelOpen(false));
+elements.captureOverlay.addEventListener("click", (event) => {
+  if (event.target === elements.captureOverlay) setCapturePanelOpen(false);
+});
 elements.fileInput.addEventListener("change", (event) => loadImageFile(event.target.files?.[0]));
 elements.toolButtons.forEach((button) => button.addEventListener("click", () => setTool(button.dataset.tool)));
 elements.zoomOut.addEventListener("click", () => zoomAroundCenter(state.viewport.scale / 1.25));

@@ -11,6 +11,11 @@ function setInfoPanelOpen(open) {
   if (open) elements.closeInfo.focus();
 }
 
+function setCapturePanelOpen(open) {
+  elements.captureOverlay.hidden = !open;
+  if (open) elements.startCapture.focus();
+}
+
 function drawImage() {
   if (!state.image) return;
   ctx.imageSmoothingEnabled = state.viewport.scale < 1;
@@ -191,6 +196,7 @@ function drawRectMeasurement(item) {
   drawRectPath(item, topLeft, bottomRight);
   ctx.fill();
   ctx.stroke();
+  drawRectPadding(item);
   const guideText = nearestGuideText(rect);
   const radiusText = item.id !== "draft" ? formatRadiusText(item) : "";
   drawLabel(
@@ -277,6 +283,66 @@ function drawRectPath(item, topLeft, bottomRight) {
   ctx.lineTo(left, top + tl);
   ctx.quadraticCurveTo(left, top, left + tl, top);
   ctx.closePath();
+}
+
+function drawRectPadding(item) {
+  if (item.id === "draft" || item.id === "crop") return;
+  const padding = rectPadding(item);
+  if (!padding.top && !padding.right && !padding.bottom && !padding.left) return;
+  const inner = paddingInnerRect(item);
+  const topLeft = toScreenPoint({ x: inner.x, y: inner.y });
+  const bottomRight = toScreenPoint({ x: inner.x + inner.w, y: inner.y + inner.h });
+  ctx.save();
+  ctx.setLineDash([4, 4]);
+  ctx.lineWidth = 1;
+  ctx.strokeStyle = item.id === state.selectedId ? state.settings.rectSelected : state.settings.rect;
+  ctx.strokeRect(
+    Math.round(topLeft.x) + 0.5,
+    Math.round(topLeft.y) + 0.5,
+    Math.round(bottomRight.x - topLeft.x),
+    Math.round(bottomRight.y - topLeft.y),
+  );
+  if (item.id === state.selectedId) drawPaddingBadges(item, padding, topLeft, bottomRight);
+  ctx.restore();
+}
+
+function drawPaddingBadges(item, padding, topLeft, bottomRight) {
+  const centerX = (topLeft.x + bottomRight.x) / 2;
+  const centerY = (topLeft.y + bottomRight.y) / 2;
+  const labels = [
+    padding.top ? { text: panelNumber(panelMeasureValue(padding.top, "y", item)), x: centerX, y: topLeft.y - 8, anchor: "bottom" } : null,
+    padding.right ? { text: panelNumber(panelMeasureValue(padding.right, "x", item)), x: bottomRight.x + 7, y: centerY, anchor: "left" } : null,
+    padding.bottom ? { text: panelNumber(panelMeasureValue(padding.bottom, "y", item)), x: centerX, y: bottomRight.y + 8, anchor: "top" } : null,
+    padding.left ? { text: panelNumber(panelMeasureValue(padding.left, "x", item)), x: topLeft.x - 7, y: centerY, anchor: "right" } : null,
+  ].filter(Boolean);
+  for (const label of labels) drawPaddingBadge(label);
+}
+
+function drawPaddingBadge({ text, x, y, anchor }) {
+  ctx.save();
+  ctx.setLineDash([]);
+  ctx.font = "10px ui-sans-serif, system-ui, sans-serif";
+  ctx.textBaseline = "middle";
+  const width = Math.ceil(ctx.measureText(text).width) + 10;
+  const height = 16;
+  let left = x - width / 2;
+  let top = y - height / 2;
+  if (anchor === "left") left = x;
+  if (anchor === "right") left = x - width;
+  if (anchor === "top") top = y;
+  if (anchor === "bottom") top = y - height;
+  const size = screenSize();
+  left = Math.round(clamp(left, RULER_SIZE + 2, size.width - width - 2));
+  top = Math.round(clamp(top, RULER_SIZE + 2, size.height - height - 2));
+  ctx.fillStyle = "#111315";
+  ctx.strokeStyle = state.settings.rectSelected;
+  ctx.lineWidth = 1;
+  roundedRect(left, top, width, height, 4);
+  ctx.fill();
+  ctx.stroke();
+  ctx.fillStyle = "#ffffff";
+  ctx.fillText(text, left + 5, top + height / 2 + 0.5);
+  ctx.restore();
 }
 
 function drawRadiusHandles(item) {
@@ -507,6 +573,21 @@ function drawLoupeMeasurementOverlay(origin, imagePoint, pixel) {
         ctx.rect(Math.round(left) + 0.5, Math.round(top) + 0.5, Math.round(right - left), Math.round(bottom - top));
       }
       ctx.stroke();
+      const padding = rectPadding(item);
+      if (item.id !== "draft" && item.id !== "crop" && (padding.top || padding.right || padding.bottom || padding.left)) {
+        const innerLeft = origin.x + (rect.x + padding.left - imagePoint.x) * pixel;
+        const innerTop = origin.y + (rect.y + padding.top - imagePoint.y) * pixel;
+        const innerRight = origin.x + (rect.x + rect.w - padding.right - imagePoint.x) * pixel;
+        const innerBottom = origin.y + (rect.y + rect.h - padding.bottom - imagePoint.y) * pixel;
+        ctx.setLineDash([3, 3]);
+        ctx.lineWidth = 1;
+        ctx.strokeRect(
+          Math.round(innerLeft) + 0.5,
+          Math.round(innerTop) + 0.5,
+          Math.round(innerRight - innerLeft),
+          Math.round(innerBottom - innerTop),
+        );
+      }
     }
 
     if (item.type === "distance") {

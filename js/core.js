@@ -7,6 +7,27 @@ const elements = {
   containersPanel: document.querySelector(".containers-panel"),
   toggleContainers: document.querySelector("#toggleContainers"),
   containerList: document.querySelector("#containerList"),
+  geometryInputs: {
+    x: document.querySelector("#geometryX"),
+    y: document.querySelector("#geometryY"),
+    w: document.querySelector("#geometryW"),
+    h: document.querySelector("#geometryH"),
+  },
+  geometryUnit: document.querySelector("#geometryUnit"),
+  radiusInputs: {
+    tl: document.querySelector("#radiusTl"),
+    tr: document.querySelector("#radiusTr"),
+    br: document.querySelector("#radiusBr"),
+    bl: document.querySelector("#radiusBl"),
+  },
+  radiusModeButtons: [...document.querySelectorAll("[data-radius-mode]")],
+  paddingInputs: {
+    top: document.querySelector("#paddingTop"),
+    right: document.querySelector("#paddingRight"),
+    bottom: document.querySelector("#paddingBottom"),
+    left: document.querySelector("#paddingLeft"),
+  },
+  paddingModeButtons: [...document.querySelectorAll("[data-padding-mode]")],
   swatchList: document.querySelector("#swatchList"),
   swatchMessage: document.querySelector("#swatchMessage"),
   propertyCode: document.querySelector("#propertyCode"),
@@ -46,6 +67,9 @@ const elements = {
   infoButton: document.querySelector("#infoButton"),
   infoOverlay: document.querySelector("#infoOverlay"),
   closeInfo: document.querySelector("#closeInfo"),
+  captureOverlay: document.querySelector("#captureOverlay"),
+  startCapture: document.querySelector("#startCapture"),
+  cancelCapture: document.querySelector("#cancelCapture"),
 };
 
 const DEFAULT_SETTINGS = {
@@ -62,6 +86,8 @@ const DEFAULT_SETTINGS = {
 };
 
 const DISPLAY_UNITS = new Set(["px", "rem", "percent", "viewport"]);
+const RADIUS_MODES = new Set(["all", "free"]);
+const PADDING_MODES = new Set(["all", "axis", "free"]);
 
 const state = {
   image: null,
@@ -401,6 +427,14 @@ function normalizeItemUnit(unit) {
   return normalizeDisplayUnit(unit);
 }
 
+function normalizeRadiusMode(mode) {
+  return RADIUS_MODES.has(mode) ? mode : "all";
+}
+
+function normalizePaddingMode(mode) {
+  return PADDING_MODES.has(mode) ? mode : "all";
+}
+
 function getMeasurementById(id) {
   return state.measurements.find((item) => item.id === id) ?? null;
 }
@@ -430,10 +464,31 @@ function effectiveDisplayUnit(item = null) {
   return itemUnit === "inherit" ? normalizeDisplayUnit(state.displayUnit) : itemUnit;
 }
 
+function layoutPadding(item) {
+  const value = item?.padding;
+  return {
+    top: Number.isFinite(value?.top) ? Math.max(0, value.top) : 0,
+    right: Number.isFinite(value?.right) ? Math.max(0, value.right) : 0,
+    bottom: Number.isFinite(value?.bottom) ? Math.max(0, value.bottom) : 0,
+    left: Number.isFinite(value?.left) ? Math.max(0, value.left) : 0,
+  };
+}
+
+function rectContentBox(item) {
+  const rect = normalizedRect(item);
+  const padding = layoutPadding(item);
+  return {
+    x: rect.x + padding.left,
+    y: rect.y + padding.top,
+    w: Math.max(0, rect.w - padding.left - padding.right),
+    h: Math.max(0, rect.h - padding.top - padding.bottom),
+  };
+}
+
 function getParentRect(item) {
   if (!item?.parentId) return null;
   const parent = getMeasurementById(item.parentId);
-  return isRectMeasurement(parent) ? normalizedRect(parent) : null;
+  return isRectMeasurement(parent) ? rectContentBox(parent) : null;
 }
 
 function getBasisRect(item = null) {
@@ -446,6 +501,10 @@ function sanitizeMeasurementTree() {
     item.unit = normalizeItemUnit(item.unit);
     item.visible = item.visible !== false;
     item.locked = item.locked === true;
+    if (item.type === "rect") {
+      item.radiusMode = normalizeRadiusMode(item.radiusMode);
+      item.paddingMode = normalizePaddingMode(item.paddingMode);
+    }
     if (!item.parentId || !ids.has(item.parentId) || item.parentId === item.id) {
       item.parentId = null;
       continue;

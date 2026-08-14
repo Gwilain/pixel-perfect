@@ -177,6 +177,27 @@ function cssRadiusValue(item) {
   return values.map((value) => cssMeasureValue(value, "x", item)).join(" ");
 }
 
+function cssBoxValue(values, item = null) {
+  const [top, right, bottom, left] = values;
+  const formatted = [
+    cssMeasureValue(top, "y", item),
+    cssMeasureValue(right, "x", item),
+    cssMeasureValue(bottom, "y", item),
+    cssMeasureValue(left, "x", item),
+  ];
+  if (top === right && right === bottom && bottom === left) return formatted[0];
+  if (top === bottom && right === left) return `${formatted[0]} ${formatted[1]}`;
+  if (right === left) return `${formatted[0]} ${formatted[1]} ${formatted[2]}`;
+  return formatted.join(" ");
+}
+
+function cssPaddingValue(item) {
+  const padding = rectPadding(item);
+  const values = [padding.top, padding.right, padding.bottom, padding.left].map((value) => Math.max(0, value));
+  if (!values.some(Boolean)) return null;
+  return cssBoxValue(values, item);
+}
+
 function selectedPropertiesText() {
   const item = getMeasurementById(state.selectedId) ?? (state.selectedId === state.crop?.id ? state.crop : null);
   if (item?.type === "rect") {
@@ -190,6 +211,8 @@ function selectedPropertiesText() {
     ];
     const radius = cssRadiusValue(item);
     if (radius) lines.push(`border-radius: ${radius};`);
+    const padding = cssPaddingValue(item);
+    if (padding) lines.push(`padding: ${padding};`);
     return lines.join("\n");
   }
 
@@ -230,6 +253,341 @@ function renderSelectedProperties() {
   }
 }
 
+function selectedGeometryItem() {
+  return getMeasurementById(state.selectedId) ?? (state.selectedId === state.crop?.id ? state.crop : null);
+}
+
+function geometryFromItem(item) {
+  if (item?.type === "rect") {
+    const rect = normalizedRect(item);
+    return { x: rect.x, y: rect.y, w: rect.w, h: rect.h };
+  }
+  if (item?.type === "distance") {
+    return {
+      x: Math.min(item.a.x, item.b.x),
+      y: Math.min(item.a.y, item.b.y),
+      w: Math.abs(item.b.x - item.a.x),
+      h: Math.abs(item.b.y - item.a.y),
+    };
+  }
+  return null;
+}
+
+function panelNumber(value) {
+  return String(smartRound(value)).replace(",", ".");
+}
+
+function panelMeasureValue(value, axis = "x", item = null) {
+  if (!state.image) return value;
+  const unit = effectiveDisplayUnit(item);
+  const scaled = value * getScaleFactor();
+  if (unit === "rem") return scaled / state.settings.remBase;
+  if (unit === "percent") return (value / getImageBasis(axis, item)) * 100;
+  if (unit === "viewport") {
+    const basis = axis === "y" ? state.image.height : state.image.width;
+    return (value / basis) * 100;
+  }
+  return scaled;
+}
+
+function panelCoordValue(value, axis = "x", item = null) {
+  const parent = getParentRect(item);
+  const relativeValue = parent ? value - (axis === "y" ? parent.y : parent.x) : value;
+  return panelMeasureValue(relativeValue, axis, item);
+}
+
+function imageMeasureFromPanel(value, axis = "x", item = null) {
+  if (!state.image) return value;
+  const unit = effectiveDisplayUnit(item);
+  if (unit === "rem") return (value * state.settings.remBase) / getScaleFactor();
+  if (unit === "percent") return (value / 100) * getImageBasis(axis, item);
+  if (unit === "viewport") {
+    const basis = axis === "y" ? state.image.height : state.image.width;
+    return (value / 100) * basis;
+  }
+  return value / getScaleFactor();
+}
+
+function imageCoordFromPanel(value, axis = "x", item = null) {
+  const parent = getParentRect(item);
+  const absoluteValue = imageMeasureFromPanel(value, axis, item);
+  return parent ? absoluteValue + (axis === "y" ? parent.y : parent.x) : absoluteValue;
+}
+
+function renderGeometryControls() {
+  const inputs = elements.geometryInputs;
+  if (!inputs?.x) return;
+  const item = selectedGeometryItem();
+  const geometry = geometryFromItem(item);
+  const disabled = !geometry;
+  for (const input of Object.values(inputs)) {
+    input.disabled = disabled;
+  }
+  if (!geometry) {
+    for (const input of Object.values(inputs)) input.value = "";
+    if (elements.geometryUnit) elements.geometryUnit.textContent = "";
+    return;
+  }
+  inputs.x.value = panelNumber(panelCoordValue(geometry.x, "x", item));
+  inputs.y.value = panelNumber(panelCoordValue(geometry.y, "y", item));
+  inputs.w.value = panelNumber(panelMeasureValue(geometry.w, "x", item));
+  inputs.h.value = panelNumber(panelMeasureValue(geometry.h, "y", item));
+  if (elements.geometryUnit) {
+    const unit = effectiveDisplayUnit(item);
+    const geometryUnit = unit === "viewport" ? "X/W vw | Y/H vh" : unit === "percent" ? "%" : unit;
+    elements.geometryUnit.textContent = `(${geometryUnit})`;
+  }
+}
+
+function renderRadiusControls() {
+  const inputs = elements.radiusInputs;
+  if (!inputs?.tl) return;
+  const item = selectedGeometryItem();
+  const disabled = item?.type !== "rect" || item.id === "crop";
+  for (const input of Object.values(inputs)) {
+    input.disabled = disabled;
+  }
+  updateModeButtons(elements.radiusModeButtons, disabled ? null : normalizeRadiusMode(item.radiusMode));
+  if (disabled) {
+    for (const input of Object.values(inputs)) input.value = "";
+    return;
+  }
+  const radii = rectRadii(item);
+  inputs.tl.value = panelNumber(radii.tl);
+  inputs.tr.value = panelNumber(radii.tr);
+  inputs.br.value = panelNumber(radii.br);
+  inputs.bl.value = panelNumber(radii.bl);
+}
+
+function renderPaddingControls() {
+  const inputs = elements.paddingInputs;
+  if (!inputs?.top) return;
+  const item = selectedGeometryItem();
+  const disabled = item?.type !== "rect" || item.id === "crop";
+  for (const input of Object.values(inputs)) {
+    input.disabled = disabled;
+  }
+  updateModeButtons(elements.paddingModeButtons, disabled ? null : normalizePaddingMode(item.paddingMode));
+  if (disabled) {
+    for (const input of Object.values(inputs)) input.value = "";
+    return;
+  }
+  const padding = rectPadding(item);
+  inputs.top.value = panelNumber(padding.top);
+  inputs.right.value = panelNumber(padding.right);
+  inputs.bottom.value = panelNumber(padding.bottom);
+  inputs.left.value = panelNumber(padding.left);
+}
+
+function updateModeButtons(buttons, activeMode) {
+  for (const button of buttons ?? []) {
+    const mode = button.dataset.radiusMode ?? button.dataset.paddingMode;
+    const disabled = !activeMode;
+    button.disabled = disabled;
+    button.classList.toggle("is-active", !disabled && mode === activeMode);
+  }
+}
+
+function geometryInputValues() {
+  const inputs = elements.geometryInputs;
+  if (Object.values(inputs).some((input) => input.value.trim() === "")) return null;
+  const values = {
+    x: Number(inputs.x.value),
+    y: Number(inputs.y.value),
+    w: Number(inputs.w.value),
+    h: Number(inputs.h.value),
+  };
+  return Object.values(values).every(Number.isFinite) ? values : null;
+}
+
+function radiusInputValues() {
+  const inputs = elements.radiusInputs;
+  if (Object.values(inputs).some((input) => input.value.trim() === "")) return null;
+  const values = {
+    tl: Number(inputs.tl.value),
+    tr: Number(inputs.tr.value),
+    br: Number(inputs.br.value),
+    bl: Number(inputs.bl.value),
+  };
+  return Object.values(values).every(Number.isFinite) ? values : null;
+}
+
+function paddingInputValues() {
+  const inputs = elements.paddingInputs;
+  if (Object.values(inputs).some((input) => input.value.trim() === "")) return null;
+  const values = {
+    top: Number(inputs.top.value),
+    right: Number(inputs.right.value),
+    bottom: Number(inputs.bottom.value),
+    left: Number(inputs.left.value),
+  };
+  return Object.values(values).every(Number.isFinite) ? values : null;
+}
+
+function applyGeometryControls() {
+  const item = selectedGeometryItem();
+  const values = geometryInputValues();
+  if (!item || !values) {
+    renderGeometryControls();
+    return;
+  }
+
+  const next = {
+    x: imageCoordFromPanel(values.x, "x", item),
+    y: imageCoordFromPanel(values.y, "y", item),
+    w: Math.max(0, imageMeasureFromPanel(values.w, "x", item)),
+    h: Math.max(0, imageMeasureFromPanel(values.h, "y", item)),
+  };
+  const current = geometryFromItem(item);
+  if (!current || (
+    Math.round(current.x) === Math.round(next.x) &&
+    Math.round(current.y) === Math.round(next.y) &&
+    Math.round(current.w) === Math.round(next.w) &&
+    Math.round(current.h) === Math.round(next.h)
+  )) {
+    renderGeometryControls();
+    return;
+  }
+
+  pushUndo();
+  if (item.type === "rect") {
+    item.x = round(next.x);
+    item.y = round(next.y);
+    item.w = Math.max(1, round(next.w));
+    item.h = Math.max(1, round(next.h));
+    if (item.radii) {
+      const maxRadius = maxRectRadius(item);
+      item.radii = Object.fromEntries(
+        Object.entries(rectRadii(item)).map(([corner, value]) => [corner, clamp(value, 0, maxRadius)]),
+      );
+    }
+    if (item.padding) item.padding = clampRectPaddingValues(item, rectPadding(item));
+  } else if (item.type === "distance") {
+    const original = geometryFromItem(item);
+    const dxSign = item.b.x < item.a.x ? -1 : 1;
+    const dySign = item.b.y < item.a.y ? -1 : 1;
+    const anchorX = next.x;
+    const anchorY = next.y;
+    item.a = { x: round(anchorX), y: round(anchorY) };
+    item.b = {
+      x: round(anchorX + next.w * dxSign),
+      y: round(anchorY + next.h * dySign),
+    };
+    if (original?.w === 0) item.b.x = round(anchorX);
+    if (original?.h === 0) item.b.y = round(anchorY);
+  }
+
+  if (item.id === "crop") state.crop = normalizedCrop(item);
+  persist();
+  render();
+}
+
+function applyRadiusControls(sourceCorner = "tl") {
+  const item = selectedGeometryItem();
+  const values = radiusInputValues();
+  if (!item || item.type !== "rect" || item.id === "crop" || !values) {
+    renderRadiusControls();
+    return;
+  }
+
+  const maxRadius = maxRectRadius(item);
+  const mode = normalizeRadiusMode(item.radiusMode);
+  let next;
+  if (mode === "all") {
+    const value = clamp(round(values[sourceCorner] ?? values.tl), 0, maxRadius);
+    next = { tl: value, tr: value, br: value, bl: value };
+  } else {
+    next = Object.fromEntries(
+      Object.entries(values).map(([corner, value]) => [corner, clamp(round(value), 0, maxRadius)]),
+    );
+  }
+  const current = rectRadii(item);
+  if (Object.keys(next).every((corner) => Math.round(current[corner]) === Math.round(next[corner]))) {
+    renderRadiusControls();
+    return;
+  }
+
+  pushUndo();
+  item.radiusMode = mode;
+  item.radii = next;
+  persist();
+  render();
+}
+
+function paddingByMode(item, values, sourceSide = "top") {
+  const mode = normalizePaddingMode(item.paddingMode);
+  if (mode === "all") {
+    const value = Math.max(0, round(values[sourceSide] ?? values.top));
+    return clampRectPaddingValues(item, { top: value, right: value, bottom: value, left: value });
+  }
+  if (mode === "axis") {
+    const vertical = sourceSide === "top" || sourceSide === "bottom"
+      ? Math.max(0, round(values[sourceSide]))
+      : Math.max(0, round(values.top));
+    const horizontal = sourceSide === "left" || sourceSide === "right"
+      ? Math.max(0, round(values[sourceSide]))
+      : Math.max(0, round(values.right));
+    return clampRectPaddingValues(item, { top: vertical, right: horizontal, bottom: vertical, left: horizontal });
+  }
+  return clampRectPaddingValues(item, values);
+}
+
+function applyPaddingControls(sourceSide = "top") {
+  const item = selectedGeometryItem();
+  const values = paddingInputValues();
+  if (!item || item.type !== "rect" || item.id === "crop" || !values) {
+    renderPaddingControls();
+    return;
+  }
+
+  const mode = normalizePaddingMode(item.paddingMode);
+  const next = paddingByMode(item, values, sourceSide);
+  const current = rectPadding(item);
+  if (Object.keys(next).every((side) => Math.round(current[side]) === Math.round(next[side]))) {
+    renderPaddingControls();
+    return;
+  }
+
+  pushUndo();
+  item.paddingMode = mode;
+  item.padding = next;
+  persist();
+  render();
+}
+
+function setRadiusMode(mode) {
+  const item = selectedGeometryItem();
+  if (!item || item.type !== "rect" || item.id === "crop") return;
+  const nextMode = normalizeRadiusMode(mode);
+  if (normalizeRadiusMode(item.radiusMode) === nextMode) return;
+  pushUndo();
+  item.radiusMode = nextMode;
+  if (nextMode === "all") {
+    const radii = rectRadii(item);
+    const value = clamp(round(radii.tl), 0, maxRectRadius(item));
+    item.radii = { tl: value, tr: value, br: value, bl: value };
+  }
+  persist();
+  render();
+}
+
+function setPaddingMode(mode) {
+  const item = selectedGeometryItem();
+  if (!item || item.type !== "rect" || item.id === "crop") return;
+  const nextMode = normalizePaddingMode(mode);
+  if (normalizePaddingMode(item.paddingMode) === nextMode) return;
+  pushUndo();
+  item.paddingMode = nextMode;
+  const padding = rectPadding(item);
+  if (nextMode === "all") {
+    item.padding = clampRectPaddingValues(item, { top: padding.top, right: padding.top, bottom: padding.top, left: padding.top });
+  } else if (nextMode === "axis") {
+    item.padding = clampRectPaddingValues(item, { top: padding.top, right: padding.right, bottom: padding.top, left: padding.right });
+  }
+  persist();
+  render();
+}
+
 function renderSwatchList() {
   if (!elements.swatchList) return;
   elements.swatchList.replaceChildren();
@@ -267,6 +625,9 @@ function renderSwatchList() {
 function renderContainersPanel() {
   if (!elements.containerList) return;
   renderSelectedProperties();
+  renderGeometryControls();
+  renderRadiusControls();
+  renderPaddingControls();
   renderSwatchList();
   elements.containerList.replaceChildren();
 
@@ -343,6 +704,9 @@ function renderContainersPanel() {
   };
 
   for (const item of childrenByParent.get("root") ?? []) appendItem(item);
+  requestAnimationFrame(() => {
+    syncAccordionHeights();
+  });
 }
 
 elements.containerList.addEventListener("click", (event) => {
@@ -394,6 +758,114 @@ elements.containerList.addEventListener("change", (event) => {
   item.unit = normalizeItemUnit(target.value);
   persist();
   render();
+});
+
+Object.values(elements.geometryInputs ?? {}).forEach((input) => {
+  input?.addEventListener("change", applyGeometryControls);
+  input?.addEventListener("keydown", (event) => {
+    event.stopPropagation();
+    if (event.key === "Enter") {
+      event.preventDefault();
+      applyGeometryControls();
+      input.blur();
+    }
+  });
+});
+
+Object.entries(elements.radiusInputs ?? {}).forEach(([corner, input]) => {
+  input?.addEventListener("change", () => applyRadiusControls(corner));
+  input?.addEventListener("keydown", (event) => {
+    event.stopPropagation();
+    if (event.key === "Enter") {
+      event.preventDefault();
+      applyRadiusControls(corner);
+      input.blur();
+    }
+  });
+});
+
+Object.entries(elements.paddingInputs ?? {}).forEach(([side, input]) => {
+  input?.addEventListener("change", () => applyPaddingControls(side));
+  input?.addEventListener("keydown", (event) => {
+    event.stopPropagation();
+    if (event.key === "Enter") {
+      event.preventDefault();
+      applyPaddingControls(side);
+      input.blur();
+    }
+  });
+});
+
+for (const button of elements.radiusModeButtons ?? []) {
+  button.addEventListener("click", () => setRadiusMode(button.dataset.radiusMode));
+}
+
+for (const button of elements.paddingModeButtons ?? []) {
+  button.addEventListener("click", () => setPaddingMode(button.dataset.paddingMode));
+}
+
+function accordionHeaderHeight(section) {
+  return section.querySelector(".property-accordion-header")?.offsetHeight ?? 32;
+}
+
+function naturalAccordionHeight(section) {
+  const headerHeight = accordionHeaderHeight(section);
+  const mask = section.querySelector(".property-accordion-mask");
+  return headerHeight + (mask?.scrollHeight ?? 0);
+}
+
+function declaredAccordionHeight(section) {
+  const value = getComputedStyle(section).getPropertyValue("--section-height").trim();
+  const height = Number.parseFloat(value);
+  return Number.isFinite(height) && value.endsWith("px") ? height : null;
+}
+
+function targetAccordionHeight(section, collapsed) {
+  if (collapsed) return accordionHeaderHeight(section);
+  if (!section.classList.contains("properties-section-elements")) {
+    return declaredAccordionHeight(section) ?? naturalAccordionHeight(section);
+  }
+
+  const panel = elements.containersPanel?.querySelector(".properties-main");
+  if (!panel) return naturalAccordionHeight(section);
+  const otherSections = [...panel.querySelectorAll(".property-accordion")].filter((item) => item !== section);
+  const usedHeight = otherSections.reduce((sum, item) => {
+    return sum + (item.classList.contains("is-collapsed") ? accordionHeaderHeight(item) : naturalAccordionHeight(item));
+  }, 0);
+  const available = panel.clientHeight - usedHeight;
+  return clamp(available, 120, 520);
+}
+
+function syncAccordionHeights() {
+  document.querySelectorAll(".properties-main .property-accordion").forEach((section) => {
+    section.style.height = `${targetAccordionHeight(section, section.classList.contains("is-collapsed"))}px`;
+  });
+}
+
+function setAccordionCollapsed(section, collapsed) {
+  const startHeight = section.getBoundingClientRect().height;
+  section.style.height = `${startHeight}px`;
+  section.classList.toggle("is-collapsed", collapsed);
+  section.querySelector(".property-accordion-toggle")?.setAttribute("aria-expanded", String(!collapsed));
+  requestAnimationFrame(() => {
+    syncAccordionHeights();
+  });
+}
+
+document.querySelectorAll(".property-accordion-toggle").forEach((button) => {
+  button.addEventListener("click", () => {
+    const section = button.closest(".property-accordion");
+    if (!section) return;
+    setAccordionCollapsed(section, !section.classList.contains("is-collapsed"));
+  });
+});
+
+window.addEventListener("resize", () => {
+  syncAccordionHeights();
+});
+
+requestAnimationFrame(() => {
+  syncAccordionHeights();
 });
 
 elements.containerList.addEventListener("dragstart", (event) => {

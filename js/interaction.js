@@ -37,17 +37,56 @@ function rectRadii(item) {
   };
 }
 
+function rectPadding(item) {
+  const value = item?.padding;
+  return {
+    top: Number.isFinite(value?.top) ? value.top : 0,
+    right: Number.isFinite(value?.right) ? value.right : 0,
+    bottom: Number.isFinite(value?.bottom) ? value.bottom : 0,
+    left: Number.isFinite(value?.left) ? value.left : 0,
+  };
+}
+
 function maxRectRadius(item) {
   const rect = normalizedRect(item);
   return Math.max(0, Math.min(rect.w, rect.h) / 2);
 }
 
-function radiusHandlePoints(item) {
+function clampRectPaddingValues(item, padding) {
+  const rect = normalizedRect(item);
+  const next = {
+    top: Math.max(0, round(padding.top)),
+    right: Math.max(0, round(padding.right)),
+    bottom: Math.max(0, round(padding.bottom)),
+    left: Math.max(0, round(padding.left)),
+  };
+  const horizontalScale = next.left + next.right > rect.w && next.left + next.right > 0
+    ? rect.w / (next.left + next.right)
+    : 1;
+  const verticalScale = next.top + next.bottom > rect.h && next.top + next.bottom > 0
+    ? rect.h / (next.top + next.bottom)
+    : 1;
+  next.left = round(next.left * horizontalScale);
+  next.right = round(next.right * horizontalScale);
+  next.top = round(next.top * verticalScale);
+  next.bottom = round(next.bottom * verticalScale);
+  return next;
+}
+
+function visualRadiusHandleOffset(item, corner) {
   const rect = normalizedRect(item);
   const maxRadius = maxRectRadius(item);
-  const radii = rectRadii(item);
-  const fallback = clamp(16, 0, maxRadius);
-  const offset = (corner) => clamp(radii[corner] || fallback, 0, maxRadius);
+  const scale = Math.max(0.01, state.viewport.scale);
+  const actual = rectRadii(item)[corner];
+  if (actual > 0) return clamp(actual, 0, maxRadius);
+  const fallback = 7 / scale;
+  const fallbackMax = Math.min(maxRadius, Math.max(4 / scale, Math.min(rect.w, rect.h) * 0.2));
+  return clamp(fallback, 0, fallbackMax);
+}
+
+function radiusHandlePoints(item) {
+  const rect = normalizedRect(item);
+  const offset = (corner) => visualRadiusHandleOffset(item, corner);
   const left = rect.x;
   const right = rect.x + rect.w;
   const top = rect.y;
@@ -58,6 +97,40 @@ function radiusHandlePoints(item) {
     { name: "br", point: { x: right - offset("br"), y: bottom - offset("br") }, cursor: "grab" },
     { name: "bl", point: { x: left + offset("bl"), y: bottom - offset("bl") }, cursor: "grab" },
   ];
+}
+
+function paddingInnerRect(item) {
+  const rect = normalizedRect(item);
+  const padding = rectPadding(item);
+  return {
+    x: rect.x + padding.left,
+    y: rect.y + padding.top,
+    w: Math.max(0, rect.w - padding.left - padding.right),
+    h: Math.max(0, rect.h - padding.top - padding.bottom),
+    padding,
+  };
+}
+
+function paddingHandleHit(item, screenPoint) {
+  if (item.id === "crop" || item.type !== "rect") return null;
+  const padding = rectPadding(item);
+  if (!padding.top && !padding.right && !padding.bottom && !padding.left) return null;
+  const imagePoint = toImagePoint(screenPoint);
+  const inner = paddingInnerRect(item);
+  const tolerance = Math.max(0.5, 7 / state.viewport.scale);
+  const left = inner.x;
+  const right = inner.x + inner.w;
+  const top = inner.y;
+  const bottom = inner.y + inner.h;
+  if (imagePoint.x >= left - tolerance && imagePoint.x <= right + tolerance) {
+    if (Math.abs(imagePoint.y - top) <= tolerance) return { type: "paddingHandle", item, handle: "top", cursor: "ns-resize" };
+    if (Math.abs(imagePoint.y - bottom) <= tolerance) return { type: "paddingHandle", item, handle: "bottom", cursor: "ns-resize" };
+  }
+  if (imagePoint.y >= top - tolerance && imagePoint.y <= bottom + tolerance) {
+    if (Math.abs(imagePoint.x - left) <= tolerance) return { type: "paddingHandle", item, handle: "left", cursor: "ew-resize" };
+    if (Math.abs(imagePoint.x - right) <= tolerance) return { type: "paddingHandle", item, handle: "right", cursor: "ew-resize" };
+  }
+  return null;
 }
 
 function hitSelectedHandle(screenPoint) {
@@ -74,6 +147,8 @@ function hitSelectedHandle(screenPoint) {
           return { type: "radiusHandle", item, handle: handle.name, cursor: handle.cursor };
         }
       }
+      const paddingHandle = paddingHandleHit(item, screenPoint);
+      if (paddingHandle) return paddingHandle;
     }
 
     for (const handle of rectHandlePoints(item)) {
@@ -288,15 +363,45 @@ function radiusFromPoint(item, corner, imagePoint) {
 function applyRadiusHandle(item, corner, original, imagePoint, options = {}) {
   const radius = radiusFromPoint(original, corner, imagePoint);
   const next = rectRadii(original);
-  if (options.singleCorner) {
+  const singleCorner = options.singleCorner || normalizeRadiusMode(original.radiusMode) === "free";
+  if (singleCorner) {
     next[corner] = radius;
+    item.radiusMode = "free";
   } else {
     next.tl = radius;
     next.tr = radius;
     next.br = radius;
     next.bl = radius;
+    item.radiusMode = "all";
   }
   item.radii = next;
+}
+
+function paddingFromPoint(original, side, imagePoint) {
+  const rect = normalizedRect(original);
+  const padding = rectPadding(original);
+  if (side === "top") padding.top = clamp(imagePoint.y - rect.y, 0, rect.h - padding.bottom);
+  if (side === "bottom") padding.bottom = clamp(rect.y + rect.h - imagePoint.y, 0, rect.h - padding.top);
+  if (side === "left") padding.left = clamp(imagePoint.x - rect.x, 0, rect.w - padding.right);
+  if (side === "right") padding.right = clamp(rect.x + rect.w - imagePoint.x, 0, rect.w - padding.left);
+  return clampRectPaddingValues(original, padding);
+}
+
+function applyPaddingHandle(item, side, original, imagePoint) {
+  const changed = paddingFromPoint(original, side, imagePoint);
+  const mode = normalizePaddingMode(original.paddingMode);
+  item.paddingMode = mode;
+  if (mode === "all") {
+    const value = changed[side];
+    item.padding = clampRectPaddingValues(item, { top: value, right: value, bottom: value, left: value });
+  } else if (mode === "axis") {
+    const originalPadding = rectPadding(original);
+    const vertical = side === "top" || side === "bottom" ? changed[side] : originalPadding.top;
+    const horizontal = side === "left" || side === "right" ? changed[side] : originalPadding.right;
+    item.padding = clampRectPaddingValues(item, { top: vertical, right: horizontal, bottom: vertical, left: horizontal });
+  } else {
+    item.padding = changed;
+  }
 }
 
 function updateCanvasCursor(screenPoint) {
@@ -308,7 +413,7 @@ function updateCanvasCursor(screenPoint) {
     canvas.style.cursor = "move";
     return;
   }
-  if (state.drag?.type === "rectHandle") {
+  if (state.drag?.type === "rectHandle" || state.drag?.type === "paddingHandle") {
     canvas.style.cursor = state.drag.cursor;
     return;
   }

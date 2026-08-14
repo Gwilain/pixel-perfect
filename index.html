@@ -141,24 +141,132 @@
           <path d="M15 6l-6 6 6 6" />
         </svg>
       </button>
-      <div class="properties-header">
-        <span>Properties</span>
-      </div>
       <div class="properties-content">
-        <section class="properties-section">
-          <div class="properties-title">Elements</div>
-          <div id="containerList" class="container-list"></div>
-        </section>
+        <div class="properties-main">
+          <section class="properties-section properties-section-elements property-accordion">
+            <div class="property-accordion-header">
+              <button class="property-accordion-toggle" type="button" aria-expanded="true">
+                <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3l5 5-5 5" /></svg>
+                <span>Elements</span>
+              </button>
+            </div>
+            <div class="property-accordion-body">
+              <div class="property-accordion-mask">
+                <div id="containerList" class="container-list"></div>
+              </div>
+            </div>
+          </section>
 
-        <section class="properties-section">
-          <div class="properties-title">Swatches</div>
-          <div id="swatchList" class="swatch-list"></div>
-          <div id="swatchMessage" class="swatch-message" aria-live="polite"></div>
-        </section>
+          <section class="properties-section property-accordion properties-section-inspector">
+            <div class="property-accordion-header">
+              <button class="property-accordion-toggle" type="button" aria-expanded="true">
+                <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3l5 5-5 5" /></svg>
+                <span>Properties</span>
+              </button>
+            </div>
+            <div class="property-accordion-body">
+              <div class="property-accordion-mask">
+                <div class="property-subsection">
+                  <div class="property-subtitle">Position &amp; size <span id="geometryUnit" class="geometry-unit"></span></div>
+                  <div class="geometry-panel" aria-label="Selected geometry">
+                    <label>
+                      <span>X</span>
+                      <input id="geometryX" type="number" step="any" inputmode="decimal" />
+                    </label>
+                    <label>
+                      <span>Y</span>
+                      <input id="geometryY" type="number" step="any" inputmode="decimal" />
+                    </label>
+                    <label>
+                      <span>W</span>
+                      <input id="geometryW" type="number" min="0" step="any" inputmode="decimal" />
+                    </label>
+                    <label>
+                      <span>H</span>
+                      <input id="geometryH" type="number" min="0" step="any" inputmode="decimal" />
+                    </label>
+                  </div>
+                </div>
+
+                <div class="property-subsection">
+                  <div class="property-subsection-header">
+                    <div class="property-subtitle">Padding</div>
+                    <div class="mode-toggle" aria-label="Padding mode">
+                      <button type="button" data-padding-mode="all">All</button>
+                      <button type="button" data-padding-mode="axis">Axis</button>
+                      <button type="button" data-padding-mode="free">Free</button>
+                    </div>
+                  </div>
+                  <div class="padding-panel" aria-label="Selected padding">
+                    <label>
+                      <span>PT</span>
+                      <input id="paddingTop" type="number" min="0" step="any" inputmode="decimal" />
+                    </label>
+                    <label>
+                      <span>PR</span>
+                      <input id="paddingRight" type="number" min="0" step="any" inputmode="decimal" />
+                    </label>
+                    <label>
+                      <span>PB</span>
+                      <input id="paddingBottom" type="number" min="0" step="any" inputmode="decimal" />
+                    </label>
+                    <label>
+                      <span>PL</span>
+                      <input id="paddingLeft" type="number" min="0" step="any" inputmode="decimal" />
+                    </label>
+                  </div>
+                </div>
+
+                <div class="property-subsection">
+                  <div class="property-subsection-header">
+                    <div class="property-subtitle">Radius</div>
+                    <div class="mode-toggle" aria-label="Radius mode">
+                      <button type="button" data-radius-mode="all">All</button>
+                      <button type="button" data-radius-mode="free">Free</button>
+                    </div>
+                  </div>
+                  <div class="radius-panel" aria-label="Selected border radius">
+                    <label>
+                      <span>TL</span>
+                      <input id="radiusTl" type="number" min="0" step="any" inputmode="decimal" />
+                    </label>
+                    <label>
+                      <span>TR</span>
+                      <input id="radiusTr" type="number" min="0" step="any" inputmode="decimal" />
+                    </label>
+                    <label>
+                      <span>BR</span>
+                      <input id="radiusBr" type="number" min="0" step="any" inputmode="decimal" />
+                    </label>
+                    <label>
+                      <span>BL</span>
+                      <input id="radiusBl" type="number" min="0" step="any" inputmode="decimal" />
+                    </label>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </section>
+
+          <section class="properties-section properties-section-swatches property-accordion">
+            <div class="property-accordion-header">
+              <button class="property-accordion-toggle" type="button" aria-expanded="true">
+                <svg viewBox="0 0 16 16" aria-hidden="true"><path d="M5 3l5 5-5 5" /></svg>
+                <span>Swatches</span>
+              </button>
+            </div>
+            <div class="property-accordion-body">
+              <div class="property-accordion-mask">
+                <div id="swatchList" class="swatch-list"></div>
+                <div id="swatchMessage" class="swatch-message" aria-live="polite"></div>
+              </div>
+            </div>
+          </section>
+        </div>
 
         <section class="properties-section properties-section-code">
-          <div class="properties-title-row">
-            <div class="properties-title">Selected</div>
+          <div class="property-fixed-header">
+            <span>Selected</span>
             <button id="copyProperties" type="button">Copy</button>
           </div>
           <textarea id="propertyCode" class="property-code" readonly spellcheck="false" aria-label="Selected properties"></textarea>
@@ -195,6 +303,23 @@
           <p>Your images, screenshots, measurements, swatches, preferences and recent projects stay in your browser storage. The app does not upload your work to a server.</p>
           <p>The browser may still load the app files from the site that hosts it, and screen capture uses the browser's native permission prompt.</p>
           <p>License: MIT. Copyright (c) 2026 Ghislain Gillet.</p>
+        </div>
+      </section>
+    </div>
+
+    <div id="captureOverlay" class="info-overlay" hidden>
+      <section class="info-dialog" role="dialog" aria-modal="true" aria-labelledby="captureTitle">
+        <div class="info-dialog-header">
+          <h2 id="captureTitle">Capture a tab</h2>
+          <button id="cancelCapture" type="button" aria-label="Cancel capture">Cancel</button>
+        </div>
+        <div class="info-dialog-body">
+          <p>The browser will ask you to choose a tab, window, or screen to capture.</p>
+          <p>Open the target tab first, put it in the state you want, then come back here and choose it from the browser picker.</p>
+          <p>For more precise full-page captures, use a browser extension such as <a href="https://chromewebstore.google.com/detail/take-webpage-screenshots/mcbpblocgmgfnpjjppndjkmgjaogfceg" target="_blank" rel="noreferrer">FireShot</a>, export a PNG, then open or paste it here.</p>
+        </div>
+        <div class="info-dialog-actions">
+          <button id="startCapture" type="button">Choose tab</button>
         </div>
       </section>
     </div>
