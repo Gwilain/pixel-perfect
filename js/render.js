@@ -602,13 +602,18 @@ function drawLoupeMeasurementOverlay(origin, imagePoint, pixel) {
     }
 
     if (item.type === "distance") {
+      // No +0.5: an integer coordinate is the boundary between two pixels here,
+      // same as the rect branch above and toScreenPoint() on the main canvas.
+      // Adding 0.5 before scaling treated it as a pixel's center instead, which
+      // shifted the loupe's distance line half a magnified pixel off the guides
+      // and rects drawn right next to it.
       const a = {
-        x: origin.x + (item.a.x - imagePoint.x + 0.5) * pixel,
-        y: origin.y + (item.a.y - imagePoint.y + 0.5) * pixel,
+        x: origin.x + (item.a.x - imagePoint.x) * pixel,
+        y: origin.y + (item.a.y - imagePoint.y) * pixel,
       };
       const b = {
-        x: origin.x + (item.b.x - imagePoint.x + 0.5) * pixel,
-        y: origin.y + (item.b.y - imagePoint.y + 0.5) * pixel,
+        x: origin.x + (item.b.x - imagePoint.x) * pixel,
+        y: origin.y + (item.b.y - imagePoint.y) * pixel,
       };
       ctx.setLineDash(item.id === "draft" ? [pixel, pixel] : []);
       ctx.lineWidth = pixel;

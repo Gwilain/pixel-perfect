@@ -1389,6 +1389,9 @@ body.containers-opening #toggleContainers svg {
   position: relative;
   --tooltip-inset: 50%;
   --tooltip-x: -50%;
+  /* Separate from --tooltip-x: the arrow must stay under the button even when
+     .tooltip-left/-right slides the bubble itself away from it. */
+  --tooltip-arrow-x: -50%;
   --tooltip-arrow-y: 3px;
 }
 
@@ -1434,7 +1437,7 @@ body.containers-opening #toggleContainers svg {
   z-index: 90;
   left: var(--tooltip-inset);
   bottom: 100%;
-  transform: translateX(var(--tooltip-x)) translateY(var(--tooltip-arrow-y));
+  transform: translateX(var(--tooltip-arrow-x)) translateY(var(--tooltip-arrow-y));
   border: 5px solid transparent;
   border-top-color: var(--accent);
 }
@@ -1461,10 +1464,17 @@ body.containers-opening #toggleContainers svg {
    edge of the button instead. */
 .tooltip-left[data-tooltip] {
   --tooltip-inset: 0%;
-  --tooltip-x: 0%;
+  /* A percentage here is relative to the bubble's own width, not a fixed px
+     amount - so short text ("Save project") and long text ("Start a new empty
+     project") both shift left by the same proportion, keeping the arrow at a
+     consistent spot relative to the bubble instead of near its edge for short
+     tooltips and near its middle for long ones. */
+  --tooltip-x: -15%;
+  --tooltip-arrow-x: 0%;
 }
 
 .tooltip-right[data-tooltip] {
   --tooltip-inset: 100%;
   --tooltip-x: -100%;
+  --tooltip-arrow-x: -100%;
 }
