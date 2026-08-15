@@ -11,16 +11,16 @@
     <header class="toolbar">
       <img class="app-icon" src="./images/pixel-perfect.svg" alt="" />
       <div class="group">
-        <button id="newButton" class="icon-button tooltip-down" type="button" data-tooltip="Start a new empty project" aria-label="New">
+        <button id="newButton" class="icon-button tooltip-down tooltip-left" type="button" data-tooltip="Start a new empty project" aria-label="New">
           <img src="./images/new.svg" alt="" />
         </button>
-        <button id="openButton" class="icon-button tooltip-down" type="button" data-tooltip="Open an image or a Pixel Perfect project" aria-label="Open">
+        <button id="openButton" class="icon-button tooltip-down tooltip-left" type="button" data-tooltip="Open an image or a Pixel Perfect project" aria-label="Open">
           <img src="./images/open.svg" alt="" />
         </button>
-        <button id="saveButton" class="icon-button tooltip-down" type="button" data-tooltip="Save project" aria-label="Save project">
+        <button id="saveButton" class="icon-button tooltip-down tooltip-left" type="button" data-tooltip="Save project" aria-label="Save project">
           <img src="./images/save.svg" alt="" />
         </button>
-        <button id="captureButton" class="icon-button tooltip-down" type="button" data-tooltip="Capture a browser tab or window" aria-label="Capture">
+        <button id="captureButton" class="icon-button tooltip-down tooltip-left" type="button" data-tooltip="Capture a browser tab or window" aria-label="Capture">
           <img src="./images/capture.svg" alt="" />
         </button>
         <input id="fileInput" type="file" accept="image/*,.pixelperfect,application/zip" hidden />
@@ -80,7 +80,7 @@
 
       <div class="group group-right">
         <div class="settings">
-          <button id="settingsButton" class="tooltip-down" type="button" data-tooltip="Settings" aria-label="Settings" aria-haspopup="true" aria-expanded="false">&#8942;</button>
+          <button id="settingsButton" class="tooltip-down tooltip-right" type="button" data-tooltip="Settings" aria-label="Settings" aria-haspopup="true" aria-expanded="false">&#8942;</button>
           <section id="settingsPanel" class="settings-panel" aria-label="Settings" hidden>
             <div class="settings-title">Colors</div>
             <div class="color-grid">
@@ -138,7 +138,7 @@
     </main>
 
     <aside class="containers-panel" aria-label="Properties">
-      <button id="toggleContainers" class="tooltip-down" type="button" data-tooltip="Collapse containers" aria-label="Collapse containers">
+      <button id="toggleContainers" class="tooltip-down tooltip-right" type="button" data-tooltip="Collapse containers" aria-label="Collapse containers">
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M15 6l-6 6 6 6" />
         </svg>
@@ -290,7 +290,7 @@
       <span id="cursorInfo">X: - Y: -</span>
       <button id="colorInfo" type="button" data-tooltip="Copy HEX" aria-label="Copy the sampled colour as hex">Color: -</button>
       <span id="hintInfo">Guides: drag from rulers | Z: zoom tool | Space+drag: pan | Cmd/Ctrl/Alt+wheel: zoom | Esc: cancel</span>
-      <button id="infoButton" class="info-button" type="button" data-tooltip="About Pixel Perfect" aria-label="About Pixel Perfect" aria-expanded="false">
+      <button id="infoButton" class="info-button tooltip-right" type="button" data-tooltip="About Pixel Perfect" aria-label="About Pixel Perfect" aria-expanded="false">
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <circle cx="12" cy="12" r="9" />
           <path d="M12 10v7M12 7h.01" />

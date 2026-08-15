@@ -1382,8 +1382,14 @@ body.containers-opening #toggleContainers svg {
    upward, including the statusbar row, which has room above it.
    --------------------------------------------------------------------------- */
 
+/* --tooltip-inset/-x place the bubble and arrow horizontally; --tooltip-arrow-y
+   nudges the arrow up or down. Each modifier class overrides only the variable
+   it cares about, instead of every combination needing its own rule. */
 [data-tooltip] {
   position: relative;
+  --tooltip-inset: 50%;
+  --tooltip-x: -50%;
+  --tooltip-arrow-y: 3px;
 }
 
 [data-tooltip]::after,
@@ -1406,9 +1412,10 @@ body.containers-opening #toggleContainers svg {
   content: attr(data-tooltip);
   position: absolute;
   z-index: 90;
-  left: 50%;
+  left: var(--tooltip-inset);
   bottom: calc(100% + 9px);
-  transform: translateX(-50%);
+  transform: translateX(var(--tooltip-x));
+  width: max-content;
   max-width: 220px;
   padding: 7px 11px;
   border: 1px solid #000000;
@@ -1419,18 +1426,21 @@ body.containers-opening #toggleContainers svg {
   font-weight: 650;
   line-height: 1.35;
   text-align: center;
-  width: max-content;
 }
 
 [data-tooltip]::before {
   content: "";
   position: absolute;
   z-index: 90;
-  left: 50%;
+  left: var(--tooltip-inset);
   bottom: 100%;
-  transform: translateX(-50%) translateY(3px);
+  transform: translateX(var(--tooltip-x)) translateY(var(--tooltip-arrow-y));
   border: 5px solid transparent;
   border-top-color: var(--accent);
+}
+
+.tooltip-down[data-tooltip] {
+  --tooltip-arrow-y: -3px;
 }
 
 .tooltip-down[data-tooltip]::after {
@@ -1441,7 +1451,20 @@ body.containers-opening #toggleContainers svg {
 .tooltip-down[data-tooltip]::before {
   bottom: auto;
   top: 100%;
-  transform: translateX(-50%) translateY(-3px);
   border-top-color: transparent;
   border-bottom-color: var(--accent);
+}
+
+/* For buttons pinned near the left or right edge, centering would push the
+   bubble past the actual browser window edge - not fixable with overflow,
+   since it is the real viewport boundary that clips it. Grow from the near
+   edge of the button instead. */
+.tooltip-left[data-tooltip] {
+  --tooltip-inset: 0%;
+  --tooltip-x: 0%;
+}
+
+.tooltip-right[data-tooltip] {
+  --tooltip-inset: 100%;
+  --tooltip-x: -100%;
 }
