@@ -266,6 +266,7 @@ input {
 .info-dialog-actions {
   display: flex;
   justify-content: center;
+  gap: 10px;
   padding: 8px 36px 34px;
 }
 
@@ -280,6 +281,19 @@ input {
 .info-dialog-actions button:hover {
   border-color: color-mix(in srgb, var(--accent) 80%, white);
   background: color-mix(in srgb, var(--accent) 88%, white);
+}
+
+/* A dialog offering a real choice (Save/Don't Save, Keep/Restore) needs one
+   button that doesn't read as "the" accented default action. */
+.info-dialog-actions button.dialog-secondary {
+  border-color: var(--line);
+  background: var(--panel-soft);
+  color: var(--text);
+}
+
+.info-dialog-actions button.dialog-secondary:hover {
+  border-color: var(--line-strong);
+  background: #252a31;
 }
 
 .settings-title {
@@ -1301,7 +1315,7 @@ body.containers-opening #toggleContainers svg {
   position: absolute;
   top: calc(50% + 64px);
   left: 50%;
-  width: min(520px, calc(100% - 28px));
+  width: min(420px, calc(100% - 28px));
   transform: translateX(-50%);
   text-align: center;
 }
@@ -1357,4 +1371,77 @@ body.containers-opening #toggleContainers svg {
   text-align: center;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* ---------------------------------------------------------------------------
+   Tooltips. The native title attribute can't be styled, so every title= in the
+   markup was moved to data-tooltip=, rendered here as a ::after bubble with a
+   ::before arrow. Elements along the top edge (toolbar buttons, the panel
+   collapse arrow) carry .tooltip-down, since a bubble opening upward there
+   would be clipped by the body's overflow:hidden; everything else opens
+   upward, including the statusbar row, which has room above it.
+   --------------------------------------------------------------------------- */
+
+[data-tooltip] {
+  position: relative;
+}
+
+[data-tooltip]::after,
+[data-tooltip]::before {
+  visibility: hidden;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease, visibility 120ms ease;
+}
+
+[data-tooltip]:hover::after,
+[data-tooltip]:hover::before,
+[data-tooltip]:focus-visible::after,
+[data-tooltip]:focus-visible::before {
+  visibility: visible;
+  opacity: 1;
+}
+
+[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  z-index: 90;
+  left: 50%;
+  bottom: calc(100% + 9px);
+  transform: translateX(-50%);
+  max-width: 220px;
+  padding: 7px 11px;
+  border: 1px solid #000000;
+  border-radius: 6px;
+  background: var(--accent);
+  color: #000000;
+  font-size: 11px;
+  font-weight: 650;
+  line-height: 1.35;
+  text-align: center;
+  width: max-content;
+}
+
+[data-tooltip]::before {
+  content: "";
+  position: absolute;
+  z-index: 90;
+  left: 50%;
+  bottom: 100%;
+  transform: translateX(-50%) translateY(3px);
+  border: 5px solid transparent;
+  border-top-color: var(--accent);
+}
+
+.tooltip-down[data-tooltip]::after {
+  bottom: auto;
+  top: calc(100% + 9px);
+}
+
+.tooltip-down[data-tooltip]::before {
+  bottom: auto;
+  top: 100%;
+  transform: translateX(-50%) translateY(-3px);
+  border-top-color: transparent;
+  border-bottom-color: var(--accent);
 }

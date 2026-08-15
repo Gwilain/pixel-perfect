@@ -11,59 +11,59 @@
     <header class="toolbar">
       <img class="app-icon" src="./images/pixel-perfect.svg" alt="" />
       <div class="group">
-        <button id="newButton" class="icon-button" type="button" title="Start a new empty project" aria-label="New">
+        <button id="newButton" class="icon-button tooltip-down" type="button" data-tooltip="Start a new empty project" aria-label="New">
           <img src="./images/new.svg" alt="" />
         </button>
-        <button id="openButton" class="icon-button" type="button" title="Open image" aria-label="Open">
+        <button id="openButton" class="icon-button tooltip-down" type="button" data-tooltip="Open an image or a Pixel Perfect project" aria-label="Open">
           <img src="./images/open.svg" alt="" />
         </button>
-        <button id="saveButton" class="icon-button" type="button" title="Save project" aria-label="Save project">
+        <button id="saveButton" class="icon-button tooltip-down" type="button" data-tooltip="Save project" aria-label="Save project">
           <img src="./images/save.svg" alt="" />
         </button>
-        <button id="captureButton" class="icon-button" type="button" title="Capture a browser tab or window" aria-label="Capture">
+        <button id="captureButton" class="icon-button tooltip-down" type="button" data-tooltip="Capture a browser tab or window" aria-label="Capture">
           <img src="./images/capture.svg" alt="" />
         </button>
         <input id="fileInput" type="file" accept="image/*,.pixelperfect,application/zip" hidden />
       </div>
 
       <div class="group" role="toolbar" aria-label="Tools">
-        <button class="tool is-active" type="button" data-tool="select" title="Select (V)" aria-label="Select">
+        <button class="tool is-active tooltip-down" type="button" data-tool="select" data-tooltip="Select (V)" aria-label="Select">
           <img src="./images/select.svg" alt="" />
         </button>
-        <button class="tool" type="button" data-tool="rect" title="Rectangle (R)" aria-label="Rectangle">
+        <button class="tool tooltip-down" type="button" data-tool="rect" data-tooltip="Rectangle (R)" aria-label="Rectangle">
           <img src="./images/rectangle.svg" alt="" />
         </button>
-        <button class="tool" type="button" data-tool="distance" title="Distance (D)" aria-label="Distance">
+        <button class="tool tooltip-down" type="button" data-tool="distance" data-tooltip="Distance (D)" aria-label="Distance">
           <img src="./images/distance.svg" alt="" />
         </button>
-        <button class="tool" type="button" data-tool="eyedropper" title="Eyedropper (I)" aria-label="Eyedropper">
+        <button class="tool tooltip-down" type="button" data-tool="eyedropper" data-tooltip="Eyedropper (I)" aria-label="Eyedropper">
           <img src="./images/eyedrop.svg" alt="" />
         </button>
-        <button class="tool" type="button" data-tool="zoom" title="Zoom (Z)" aria-label="Zoom">
+        <button class="tool tooltip-down" type="button" data-tool="zoom" data-tooltip="Zoom (Z)" aria-label="Zoom">
           <img src="./images/zoom.svg" alt="" />
         </button>
-        <button class="tool" type="button" data-tool="crop" title="Crop (C)" aria-label="Crop">
+        <button class="tool tooltip-down" type="button" data-tool="crop" data-tooltip="Crop (C)" aria-label="Crop">
           <img src="./images/crop.svg" alt="" />
         </button>
-        <button id="applyCrop" type="button" title="Apply crop" hidden>Apply crop</button>
+        <button id="applyCrop" class="tooltip-down" type="button" data-tooltip="Apply crop" hidden>Apply crop</button>
       </div>
 
       <div class="group">
-        <button id="clearMeasurements" class="icon-button" type="button" title="Clear everything" aria-label="Clear everything">
+        <button id="clearMeasurements" class="icon-button tooltip-down" type="button" data-tooltip="Clear everything" aria-label="Clear everything">
           <img src="./images/clear.svg" alt="" />
         </button>
       </div>
 
       <div class="group">
-        <label class="theory" title="Theoretical width used to scale measurements">
+        <label class="theory tooltip-down" data-tooltip="Theoretical width used to scale measurements">
           Theo W
           <input id="theoryWidth" type="number" min="1" step="1" placeholder="px" />
         </label>
-        <label class="theory" title="Theoretical height used to scale measurements">
+        <label class="theory tooltip-down" data-tooltip="Theoretical height used to scale measurements">
           Theo H
           <input id="theoryHeight" type="number" min="1" step="1" placeholder="px" />
         </label>
-        <label class="theory" title="Unit used in measurement labels">
+        <label class="theory tooltip-down" data-tooltip="Unit used in measurement labels">
           Unit
           <select id="displayUnit">
             <option value="px">px</option>
@@ -72,7 +72,7 @@
             <option value="viewport">vw / vh</option>
           </select>
         </label>
-        <label class="toggle" title="Show a loupe and snap rectangle and distance points to whole pixels (P)">
+        <label class="toggle tooltip-down" data-tooltip="Show a loupe and snap rectangle and distance points to whole pixels (P)">
           <input id="pixelPerfectMode" type="checkbox" />
           Pixel perfect
         </label>
@@ -80,7 +80,7 @@
 
       <div class="group group-right">
         <div class="settings">
-          <button id="settingsButton" type="button" title="Settings" aria-label="Settings" aria-haspopup="true" aria-expanded="false">&#8942;</button>
+          <button id="settingsButton" class="tooltip-down" type="button" data-tooltip="Settings" aria-label="Settings" aria-haspopup="true" aria-expanded="false">&#8942;</button>
           <section id="settingsPanel" class="settings-panel" aria-label="Settings" hidden>
             <div class="settings-title">Colors</div>
             <div class="color-grid">
@@ -111,11 +111,11 @@
               Rem base
               <input id="remBase" type="number" min="1" step="1" />
             </label>
-            <label class="toggle setting-toggle" title="Temporarily align measurements with other rectangle edges and distance points">
+            <label class="toggle setting-toggle" data-tooltip="Temporarily align measurements with other rectangle edges and distance points">
               <input id="smartGuides" type="checkbox" />
               Smart guides
             </label>
-            <label class="toggle setting-toggle" title="Snap rectangle and distance points to manual guides">
+            <label class="toggle setting-toggle" data-tooltip="Snap rectangle and distance points to manual guides">
               <input id="snapToGuides" type="checkbox" />
               Snap to guides
             </label>
@@ -138,7 +138,7 @@
     </main>
 
     <aside class="containers-panel" aria-label="Properties">
-      <button id="toggleContainers" type="button" title="Collapse containers" aria-label="Collapse containers">
+      <button id="toggleContainers" class="tooltip-down" type="button" data-tooltip="Collapse containers" aria-label="Collapse containers">
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <path d="M15 6l-6 6 6 6" />
         </svg>
@@ -194,7 +194,7 @@
                   <div class="property-subsection-header">
                     <div class="property-subtitle">Padding</div>
                     <div class="property-actions">
-                      <button id="toggleAutoPadding" class="property-action-button" type="button" title="Add automatic padding" aria-label="Add automatic padding">+</button>
+                      <button id="toggleAutoPadding" class="property-action-button" type="button" data-tooltip="Add automatic padding" aria-label="Add automatic padding">+</button>
                       <div class="mode-toggle" aria-label="Padding mode">
                         <button type="button" data-padding-mode="all">All</button>
                         <button type="button" data-padding-mode="axis">Axis</button>
@@ -283,14 +283,14 @@
       <span id="saveInfo" class="save-info"></span>
       <span id="imageInfo">Image: -</span>
       <span class="zoom-control">
-        <button id="zoomOut" type="button" title="Zoom out around center">-</button>
+        <button id="zoomOut" type="button" data-tooltip="Zoom out around center" aria-label="Zoom out">-</button>
         <input id="zoomInfo" type="text" inputmode="numeric" aria-label="Zoom percentage" value="100%" />
-        <button id="zoomIn" type="button" title="Zoom in around center">+</button>
+        <button id="zoomIn" type="button" data-tooltip="Zoom in around center" aria-label="Zoom in">+</button>
       </span>
       <span id="cursorInfo">X: - Y: -</span>
-      <button id="colorInfo" type="button" title="Copy HEX">Color: -</button>
+      <button id="colorInfo" type="button" data-tooltip="Copy HEX" aria-label="Copy the sampled colour as hex">Color: -</button>
       <span id="hintInfo">Guides: drag from rulers | Z: zoom tool | Space+drag: pan | Cmd/Ctrl/Alt+wheel: zoom | Esc: cancel</span>
-      <button id="infoButton" class="info-button" type="button" title="About Pixel Perfect" aria-label="About Pixel Perfect" aria-expanded="false">
+      <button id="infoButton" class="info-button" type="button" data-tooltip="About Pixel Perfect" aria-label="About Pixel Perfect" aria-expanded="false">
         <svg viewBox="0 0 24 24" aria-hidden="true">
           <circle cx="12" cy="12" r="9" />
           <path d="M12 10v7M12 7h.01" />
@@ -342,6 +342,38 @@
         </div>
         <div class="info-dialog-actions">
           <button id="confirmClear" type="button">Clear everything</button>
+        </div>
+      </section>
+    </div>
+
+    <div id="unsavedOverlay" class="info-overlay" hidden>
+      <section class="info-dialog" role="alertdialog" aria-modal="true" aria-labelledby="unsavedTitle" aria-describedby="unsavedMessage">
+        <div class="info-dialog-header">
+          <h2 id="unsavedTitle">Save changes?</h2>
+          <button id="cancelUnsaved" class="dialog-close" type="button" aria-label="Cancel">×</button>
+        </div>
+        <div class="info-dialog-body">
+          <p id="unsavedMessage">This project has unsaved changes. They stay in this browser as a local backup for this image, but the project file itself won't have them until you save.</p>
+        </div>
+        <div class="info-dialog-actions">
+          <button id="discardUnsaved" class="dialog-secondary" type="button">Don't Save</button>
+          <button id="saveUnsaved" type="button">Save</button>
+        </div>
+      </section>
+    </div>
+
+    <div id="recoveredOverlay" class="info-overlay" hidden>
+      <section class="info-dialog" role="alertdialog" aria-modal="true" aria-labelledby="recoveredTitle" aria-describedby="recoveredMessage">
+        <div class="info-dialog-header">
+          <h2 id="recoveredTitle">Newer changes found</h2>
+          <button id="dismissRecovered" class="dialog-close" type="button" aria-label="Keep the saved file version">×</button>
+        </div>
+        <div class="info-dialog-body">
+          <p id="recoveredMessage">This browser kept changes to this image made after this file was last saved. Restore them, or keep the file as it was saved?</p>
+        </div>
+        <div class="info-dialog-actions">
+          <button id="keepFileVersion" class="dialog-secondary" type="button">Keep Saved Version</button>
+          <button id="restoreRecovered" type="button">Restore My Changes</button>
         </div>
       </section>
     </div>

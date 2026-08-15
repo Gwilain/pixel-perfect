@@ -73,6 +73,14 @@ const elements = {
   clearOverlay: document.querySelector("#clearOverlay"),
   confirmClear: document.querySelector("#confirmClear"),
   cancelClear: document.querySelector("#cancelClear"),
+  unsavedOverlay: document.querySelector("#unsavedOverlay"),
+  saveUnsaved: document.querySelector("#saveUnsaved"),
+  discardUnsaved: document.querySelector("#discardUnsaved"),
+  cancelUnsaved: document.querySelector("#cancelUnsaved"),
+  recoveredOverlay: document.querySelector("#recoveredOverlay"),
+  restoreRecovered: document.querySelector("#restoreRecovered"),
+  keepFileVersion: document.querySelector("#keepFileVersion"),
+  dismissRecovered: document.querySelector("#dismissRecovered"),
 };
 
 const DEFAULT_SETTINGS = {
@@ -147,11 +155,12 @@ const CONTAINERS_COLLAPSED_KEY = "pixel-perfect:containers-collapsed";
 const MEASURE_KEY_PREFIX = "pixel-perfect:measure:";
 const LEGACY_MEASURE_KEY_PREFIX = "pixel-measure:";
 const MEASURE_LIMIT = 20;
-// A recent backed by a file handle is a pointer: a few hundred bytes, and the
-// file itself stays on disk. A recent backed by a blob is a full copy in
-// IndexedDB, so far fewer of those are worth keeping.
-const RECENT_LIMIT = 15;
-const RECENT_BLOB_LIMIT = 3;
+// A recent backed by a file handle costs a pointer (~1.4KB measured); one
+// backed by an image blob costs a full copy in IndexedDB (~70KB for a 1080p
+// screenshot, measured). Even 6 of the latter is well under a megabyte, so one
+// small cap for both kinds is simpler than juggling two, and it is also what
+// keeps the recents grid to two clean rows of three.
+const RECENT_LIMIT = 6;
 const DB_NAME = "pixel-perfect-db";
 const DB_VERSION = 1;
 const UNDO_LIMIT = 40;

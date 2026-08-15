@@ -22,6 +22,19 @@ function setClearPanelOpen(open) {
   if (open) elements.cancelClear.focus();
 }
 
+function setUnsavedPanelOpen(open) {
+  elements.unsavedOverlay.hidden = !open;
+  // Focus Save: of the two real choices here, losing work by a stray Enter
+  // should not be the one a distracted keypress lands on.
+  if (open) elements.saveUnsaved.focus();
+}
+
+function setRecoveredPanelOpen(open) {
+  elements.recoveredOverlay.hidden = !open;
+  // Focus the conservative choice: keep exactly what the file already had.
+  if (open) elements.keepFileVersion.focus();
+}
+
 function drawImage() {
   if (!state.image) return;
   ctx.imageSmoothingEnabled = state.viewport.scale < 1;

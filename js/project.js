@@ -50,6 +50,77 @@ function detachProjectFile() {
   state.isDirty = false;
 }
 
+// ---------------------------------------------------------------------------
+// Guarding destructive project switches (New, Open, Capture, Paste, reopening a
+// different recent). Each resolves the pending promise below; only one of
+// these dialogs is ever open at a time, so a single pending variable is enough.
+// ---------------------------------------------------------------------------
+
+let pendingUnsavedResolve = null;
+
+// True means proceed with the destructive action. Nothing to lose (no image,
+// or already saved): resolves immediately without asking.
+function confirmDiscardUnsaved() {
+  if (!state.image || !state.isDirty) return Promise.resolve(true);
+  return new Promise((resolve) => {
+    pendingUnsavedResolve = resolve;
+    setUnsavedPanelOpen(true);
+  });
+}
+
+function resolveUnsavedPrompt(proceed) {
+  setUnsavedPanelOpen(false);
+  pendingUnsavedResolve?.(proceed);
+  pendingUnsavedResolve = null;
+}
+
+async function saveThenProceed() {
+  await saveProject();
+  // saveProject() reports its own failure or a cancelled picker through the
+  // hint bar; either way, isDirty stays true and the caller must not proceed.
+  resolveUnsavedPrompt(!state.isDirty);
+}
+
+// ---------------------------------------------------------------------------
+// Recovering a newer local autosave than the file being opened.
+// ---------------------------------------------------------------------------
+
+// Reads what persist() has stored for this image without touching it, so it
+// can be inspected before applyProjectPayload()+persist() would overwrite it
+// with the file's own content.
+function readStoredProjectPayload(signature) {
+  try {
+    const raw = localStorage.getItem(measureKey(signature)) ?? localStorage.getItem(legacyMeasureKey(signature));
+    if (!raw) return null;
+    const payload = JSON.parse(raw);
+    return payload.imageSignature === signature ? payload : null;
+  } catch {
+    return null;
+  }
+}
+
+function newerAutosavePayload(signature, fileSavedAt) {
+  const stored = readStoredProjectPayload(signature);
+  if (!stored || !Number.isFinite(stored.updatedAt)) return null;
+  const fileTime = Date.parse(fileSavedAt ?? "") || 0;
+  return stored.updatedAt > fileTime ? stored : null;
+}
+
+let pendingRecoveredResolve = null;
+
+function confirmRestoreAutosave() {
+  return new Promise((resolve) => {
+    pendingRecoveredResolve = resolve;
+    setRecoveredPanelOpen(true);
+  });
+}
+
+function resolveRecoveredPrompt(restore) {
+  setRecoveredPanelOpen(false);
+  pendingRecoveredResolve?.(restore);
+  pendingRecoveredResolve = null;
+}
+
 function hasClearableContent() {
   return Boolean(
     state.measurements.length ||
@@ -135,6 +206,7 @@ function isProjectFile(file) {
 
 async function openFile(file) {
   if (!file) return;
+  if (!(await confirmDiscardUnsaved())) return;
   if (isProjectFile(file)) {
     await openProjectFile(file);
     return;
@@ -196,6 +268,7 @@ async function captureScreen() {
     elements.hintInfo.textContent = "Screen capture is unavailable here. Use a system screenshot, then paste it.";
     return;
   }
+  if (!(await confirmDiscardUnsaved())) return;
 
   let stream = null;
   try {
@@ -292,20 +365,8 @@ async function deleteImageRecord(id) {
   db.close();
 }
 
-// Handle-backed entries cost a pointer, blob-backed ones cost a full image, so
-// they get very different allowances.
 function trimRecentProjects(projects) {
-  const kept = [];
-  let blobBacked = 0;
-  for (const project of projects) {
-    if (kept.length >= RECENT_LIMIT) break;
-    if (project.kind !== "project") {
-      if (blobBacked >= RECENT_BLOB_LIMIT) continue;
-      blobBacked += 1;
-    }
-    kept.push(project);
-  }
-  return kept;
+  return projects.slice(0, RECENT_LIMIT);
 }
 
 function readRecentProjects() {
@@ -380,6 +441,7 @@ function forgetRecent(id) {
 }
 
 async function reopenRecentProject(id) {
+  if (!(await confirmDiscardUnsaved())) return;
   let record = null;
   try {
     record = await getImageRecord(id);
@@ -820,6 +882,7 @@ async function openWithPicker() {
     return;
   }
   const file = await handle.getFile();
+  if (!(await confirmDiscardUnsaved())) return;
   if (isProjectFile(file)) await openProjectFile(file, handle);
   else await loadImageFile(file);
 }
@@ -861,11 +924,32 @@ async function openProjectFile(file, handle = null) {
   });
   applyProjectPayload(payload);
   state.selectedId = null;
-  persist();
+
+  // Read before persist() below would overwrite it with the file's own data.
+  const recovered = newerAutosavePayload(state.imageSignature, payload.savedAt);
   render();
+  elements.hintInfo.textContent = `Opened ${file.name}.`;
+
+  let usedRecovered = false;
+  if (recovered) {
+    usedRecovered = await confirmRestoreAutosave();
+    if (usedRecovered) {
+      applyProjectPayload(recovered);
+      state.selectedId = null;
+      render();
+    }
+  }
+
+  persist();
   // Bind the session to the file it came from, so Ctrl+S writes back in place.
   state.fileHandle = handle;
-  markSaved(handle?.name ?? file.name);
-  elements.hintInfo.textContent = `Opened ${file.name}.`;
+  if (usedRecovered) {
+    // The working copy now differs from what is on disk until the next save.
+    state.fileName = handle?.name ?? file.name;
+    markDirty();
+    elements.hintInfo.textContent = "Restored unsaved changes. Save to write them to the file.";
+  } else {
+    markSaved(handle?.name ?? file.name);
+  }
   if (handle) await rememberRecent({ handle, name: handle.name });
 }

@@ -383,6 +383,14 @@ function keyDown(event) {
     event.preventDefault();
     setActualZoom();
   } else if (event.key === "Escape") {
+    if (!elements.recoveredOverlay.hidden) {
+      resolveRecoveredPrompt(false);
+      return;
+    }
+    if (!elements.unsavedOverlay.hidden) {
+      resolveUnsavedPrompt(false);
+      return;
+    }
     if (!elements.clearOverlay.hidden) {
       setClearPanelOpen(false);
       return;
@@ -441,6 +449,7 @@ function keyUp(event) {
 // Registers every document, window and canvas listener.
 function initEvents() {
   elements.newButton.addEventListener("click", async () => {
+    if (!(await confirmDiscardUnsaved())) return;
     await pushUndoBeforeImageChange();
     resetProject();
   });
@@ -486,6 +495,18 @@ function initEvents() {
   elements.cancelClear.addEventListener("click", () => setClearPanelOpen(false));
   elements.clearOverlay.addEventListener("click", (event) => {
     if (event.target === elements.clearOverlay) setClearPanelOpen(false);
+  });
+  elements.saveUnsaved.addEventListener("click", () => void saveThenProceed());
+  elements.discardUnsaved.addEventListener("click", () => resolveUnsavedPrompt(true));
+  elements.cancelUnsaved.addEventListener("click", () => resolveUnsavedPrompt(false));
+  elements.unsavedOverlay.addEventListener("click", (event) => {
+    if (event.target === elements.unsavedOverlay) resolveUnsavedPrompt(false);
+  });
+  elements.restoreRecovered.addEventListener("click", () => resolveRecoveredPrompt(true));
+  elements.keepFileVersion.addEventListener("click", () => resolveRecoveredPrompt(false));
+  elements.dismissRecovered.addEventListener("click", () => resolveRecoveredPrompt(false));
+  elements.recoveredOverlay.addEventListener("click", (event) => {
+    if (event.target === elements.recoveredOverlay) resolveRecoveredPrompt(false);
   });
   elements.applyCrop.addEventListener("click", applyCrop);
   elements.settingsButton.addEventListener("click", (event) => {
@@ -630,6 +651,7 @@ function initEvents() {
     const file = imageItem?.getAsFile();
     if (!file) return;
     event.preventDefault();
+    if (!(await confirmDiscardUnsaved())) return;
     const extension = file.type.split("/")[1] || "png";
     await pushUndoBeforeImageChange();
     detachProjectFile();
