@@ -1301,7 +1301,7 @@ body.containers-opening #toggleContainers svg {
   position: absolute;
   top: calc(50% + 64px);
   left: 50%;
-  width: min(420px, calc(100% - 28px));
+  width: min(520px, calc(100% - 28px));
   transform: translateX(-50%);
   text-align: center;
 }
@@ -1319,14 +1319,20 @@ body.containers-opening #toggleContainers svg {
   text-transform: uppercase;
 }
 
+/* Flex-wrap centers each line on its own, so a row left incomplete (4 tiles at
+   3-per-row, say) sits centered instead of stuck to the left with dead space
+   beside it, which is what a grid's fixed column tracks would do. Tiles are a
+   fixed width rather than a fraction, so they don't stretch to fill that gap. */
 .recent-project-list {
-  display: grid;
-  grid-template-columns: repeat(3, minmax(0, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
   gap: 8px;
 }
 
 .recent-project {
   display: grid;
+  flex: 0 0 108px;
   grid-template-rows: 72px auto;
   gap: 6px;
   height: auto;
