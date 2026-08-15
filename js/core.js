@@ -36,6 +36,7 @@ const elements = {
   recentProjects: document.querySelector("#recentProjects"),
   recentProjectList: document.querySelector("#recentProjectList"),
   fileInput: document.querySelector("#fileInput"),
+  appIconButton: document.querySelector("#appIconButton"),
   newButton: document.querySelector("#newButton"),
   openButton: document.querySelector("#openButton"),
   saveButton: document.querySelector("#saveButton"),

@@ -59,6 +59,21 @@ input {
   border-bottom: 1px solid var(--line);
 }
 
+.app-icon-button {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  height: 32px;
+  padding: 0 4px;
+  border: 0;
+  background: transparent;
+}
+
+.app-icon-button:hover {
+  background: var(--panel-soft);
+}
+
 .app-icon {
   width: 24px;
   height: 24px;

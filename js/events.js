@@ -448,6 +448,7 @@ function keyUp(event) {
 
 // Registers every document, window and canvas listener.
 function initEvents() {
+  elements.appIconButton.addEventListener("click", () => setActualZoom());
   elements.newButton.addEventListener("click", async () => {
     if (!(await confirmDiscardUnsaved())) return;
     await pushUndoBeforeImageChange();
