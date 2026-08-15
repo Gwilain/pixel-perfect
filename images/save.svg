@@ -9,9 +9,12 @@
         stroke-linecap: round;
         stroke-linejoin: round;
       }
+      .st1 {
+        fill: #fff;
+      }
     </style>
   </defs>
-  <path class="st0" d="M2.7,6.2h6.4l2.1,2.2h10.1v10.9H2.7V6.2Z"/>
-  <path class="st0" d="M2.7,8.4v-3.2h6.4l2.1,2.2"/>
-  <path class="st0" d="M5.5,12.9h13"/>
+  <path class="st0" d="M4.2,3.2h12.7l2.9,2.9v14.7H4.2V3.2Z"/>
+  <path class="st1" d="M7.4,3.2h7.1v5.1H7.4z"/>
+  <path class="st0" d="M7.4,14.1h9.2v6.7H7.4z"/>
 </svg>

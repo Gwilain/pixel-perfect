@@ -366,6 +366,13 @@ function keyDown(event) {
     canvas.style.cursor = "grab";
   }
   const mod = isMac ? event.metaKey : event.ctrlKey;
+  // Deliberately not gated on isEditingField: Ctrl+S is muscle memory and must
+  // work even with the cursor parked in a panel field.
+  if (mod && event.key.toLowerCase() === "s") {
+    event.preventDefault();
+    void saveProject({ saveAs: event.shiftKey });
+    return;
+  }
   if (mod && event.key.toLowerCase() === "z" && !event.shiftKey && !isEditingField) {
     event.preventDefault();
     void undo();
@@ -437,7 +444,8 @@ function initEvents() {
     await pushUndoBeforeImageChange();
     resetProject();
   });
-  elements.openButton.addEventListener("click", () => elements.fileInput.click());
+  elements.openButton.addEventListener("click", () => void openWithPicker());
+  elements.saveButton.addEventListener("click", () => void saveProject());
   elements.captureButton.addEventListener("click", () => {
     setSettingsPanelOpen(false);
     setInfoPanelOpen(false);
@@ -451,7 +459,10 @@ function initEvents() {
   elements.captureOverlay.addEventListener("click", (event) => {
     if (event.target === elements.captureOverlay) setCapturePanelOpen(false);
   });
-  elements.fileInput.addEventListener("change", (event) => loadImageFile(event.target.files?.[0]));
+  elements.fileInput.addEventListener("change", async (event) => {
+    await openFile(event.target.files?.[0]);
+    event.target.value = "";
+  });
   elements.toolButtons.forEach((button) => button.addEventListener("click", () => setTool(button.dataset.tool)));
   elements.zoomOut.addEventListener("click", () => zoomAroundCenter(state.viewport.scale / 1.25));
   elements.zoomIn.addEventListener("click", () => zoomAroundCenter(state.viewport.scale * 1.25));
@@ -477,9 +488,6 @@ function initEvents() {
     if (event.target === elements.clearOverlay) setClearPanelOpen(false);
   });
   elements.applyCrop.addEventListener("click", applyCrop);
-  elements.exportJson.addEventListener("click", exportMeasurements);
-  elements.importJson.addEventListener("click", () => elements.jsonInput.click());
-  elements.jsonInput.addEventListener("change", (event) => importMeasurements(event.target.files?.[0]));
   elements.settingsButton.addEventListener("click", (event) => {
     event.stopPropagation();
     setSettingsPanelOpen(elements.settingsPanel.hidden);
@@ -576,7 +584,7 @@ function initEvents() {
   elements.dropZone.addEventListener("drop", (event) => {
     event.preventDefault();
     elements.dropZone.classList.remove("is-dragover");
-    loadImageFile(droppedImageFile(event.dataTransfer));
+    openFile(droppedProjectFile(event.dataTransfer));
   });
 
   for (const eventName of ["dragenter", "dragover", "drop"]) {
@@ -587,7 +595,7 @@ function initEvents() {
         event.preventDefault();
         if (eventName === "drop" && !elements.dropZone.contains(event.target)) {
           elements.dropZone.classList.remove("is-dragover");
-          loadImageFile(droppedImageFile(event.dataTransfer));
+          openFile(droppedProjectFile(event.dataTransfer));
         }
       },
       { capture: true },
@@ -609,6 +617,14 @@ function initEvents() {
   window.addEventListener("keyup", keyUp);
   window.addEventListener("resize", resizeCanvas);
   window.addEventListener("click", () => setSettingsPanelOpen(false));
+  // Only warns when the document has drifted from its file. Autosave covers a
+  // crash; it does not cover closing the tab and expecting the file to be current.
+  window.addEventListener("beforeunload", (event) => {
+    if (!state.isDirty) return;
+    event.preventDefault();
+    event.returnValue = "";
+  });
+
   window.addEventListener("paste", async (event) => {
     const imageItem = [...(event.clipboardData?.items ?? [])].find((item) => item.type.startsWith("image/"));
     const file = imageItem?.getAsFile();
@@ -616,6 +632,7 @@ function initEvents() {
     event.preventDefault();
     const extension = file.type.split("/")[1] || "png";
     await pushUndoBeforeImageChange();
+    detachProjectFile();
     await loadImageBlob(file, `Pasted image ${new Date().toLocaleString("en-US")}.${extension}`);
   });
 }

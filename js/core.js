@@ -27,6 +27,7 @@ const elements = {
     bottom: document.querySelector("#paddingBottom"),
     left: document.querySelector("#paddingLeft"),
   },
+  toggleAutoPadding: document.querySelector("#toggleAutoPadding"),
   paddingModeButtons: [...document.querySelectorAll("[data-padding-mode]")],
   swatchList: document.querySelector("#swatchList"),
   swatchMessage: document.querySelector("#swatchMessage"),
@@ -35,17 +36,15 @@ const elements = {
   recentProjects: document.querySelector("#recentProjects"),
   recentProjectList: document.querySelector("#recentProjectList"),
   fileInput: document.querySelector("#fileInput"),
-  jsonInput: document.querySelector("#jsonInput"),
   newButton: document.querySelector("#newButton"),
   openButton: document.querySelector("#openButton"),
+  saveButton: document.querySelector("#saveButton"),
   captureButton: document.querySelector("#captureButton"),
   toolButtons: [...document.querySelectorAll(".tool")],
   zoomOut: document.querySelector("#zoomOut"),
   zoomIn: document.querySelector("#zoomIn"),
   clearMeasurements: document.querySelector("#clearMeasurements"),
   applyCrop: document.querySelector("#applyCrop"),
-  exportJson: document.querySelector("#exportJson"),
-  importJson: document.querySelector("#importJson"),
   theoryWidth: document.querySelector("#theoryWidth"),
   theoryHeight: document.querySelector("#theoryHeight"),
   displayUnit: document.querySelector("#displayUnit"),
@@ -59,6 +58,7 @@ const elements = {
   remBase: document.querySelector("#remBase"),
   smartGuides: document.querySelector("#smartGuides"),
   resetSettings: document.querySelector("#resetSettings"),
+  saveInfo: document.querySelector("#saveInfo"),
   imageInfo: document.querySelector("#imageInfo"),
   zoomInfo: document.querySelector("#zoomInfo"),
   cursorInfo: document.querySelector("#cursorInfo"),
@@ -122,6 +122,11 @@ const state = {
   settings: { ...DEFAULT_SETTINGS },
   recentProjects: [],
   crop: null,
+  // The project file this session is bound to, when the browser can give us one.
+  // Without it, saving falls back to a download and every save makes a new copy.
+  fileHandle: null,
+  fileName: "",
+  isDirty: false,
 };
 
 state.imageCtx = state.imageCanvas.getContext("2d", { willReadFrequently: true });
@@ -133,7 +138,7 @@ const smartRound = (value) => (Math.abs(value - Math.round(value)) < 0.05 ? Math
 const distance = (a, b) => Math.hypot(a.x - b.x, a.y - b.y);
 const isMac = navigator.platform.toLowerCase().includes("mac");
 const isHexColor = (value) => /^#[0-9a-f]{6}$/i.test(value);
-const RULER_SIZE = 12;
+const RULER_SIZE = 14;
 const HANDLE_SIZE = 8;
 const SNAP_DISTANCE = 8;
 const SETTINGS_KEY = "pixel-perfect:settings";
@@ -142,7 +147,11 @@ const CONTAINERS_COLLAPSED_KEY = "pixel-perfect:containers-collapsed";
 const MEASURE_KEY_PREFIX = "pixel-perfect:measure:";
 const LEGACY_MEASURE_KEY_PREFIX = "pixel-measure:";
 const MEASURE_LIMIT = 20;
-const RECENT_PROJECT_LIMIT = 3;
+// A recent backed by a file handle is a pointer: a few hundred bytes, and the
+// file itself stays on disk. A recent backed by a blob is a full copy in
+// IndexedDB, so far fewer of those are worth keeping.
+const RECENT_LIMIT = 15;
+const RECENT_BLOB_LIMIT = 3;
 const DB_NAME = "pixel-perfect-db";
 const DB_VERSION = 1;
 const UNDO_LIMIT = 40;
@@ -703,4 +712,3 @@ function formatMeasureValue(value, axis = "x", item = null) {
 function formatCoord(value, axis = "x", item = null) {
   return formatWithUnit(smartRound(toDisplayCoord(value, axis, item)), axis, item);
 }
-

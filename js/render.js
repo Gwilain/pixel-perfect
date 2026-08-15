@@ -54,7 +54,8 @@ function drawRulers() {
   ctx.fillRect(0, 0, RULER_SIZE, size.height);
   ctx.fillStyle = "rgba(32, 36, 42, 0.82)";
   ctx.fillRect(0, 0, RULER_SIZE, RULER_SIZE);
-  ctx.strokeStyle = "rgba(255, 255, 255, 0.12)";
+  ctx.strokeStyle = "rgba(255, 255, 255, 0.16)";
+  ctx.lineWidth = 1.25;
   ctx.beginPath();
   ctx.moveTo(0, RULER_SIZE + 0.5);
   ctx.lineTo(size.width, RULER_SIZE + 0.5);
@@ -72,18 +73,19 @@ function drawRulers() {
   const endX = toImagePoint({ x: size.width, y: 0 }).x;
   const startY = Math.floor(toImagePoint({ x: 0, y: RULER_SIZE }).y / step) * step;
   const endY = toImagePoint({ x: 0, y: size.height }).y;
-  ctx.font = "8px ui-sans-serif, system-ui, sans-serif";
-  ctx.fillStyle = "rgba(165, 173, 184, 0.82)";
-  ctx.strokeStyle = "rgba(232, 237, 242, 0.28)";
+  ctx.font = "9px ui-sans-serif, system-ui, sans-serif";
+  ctx.fillStyle = "rgba(181, 189, 200, 0.9)";
+  ctx.strokeStyle = "rgba(232, 237, 242, 0.36)";
+  ctx.lineWidth = 1;
 
   for (let x = startX; x <= endX; x += step) {
     const screenX = toScreenPoint({ x, y: 0 }).x;
     if (screenX < RULER_SIZE) continue;
     ctx.beginPath();
     ctx.moveTo(screenX + 0.5, RULER_SIZE);
-    ctx.lineTo(screenX + 0.5, x % (step * 2) === 0 ? 4 : 7);
+    ctx.lineTo(screenX + 0.5, x % (step * 2) === 0 ? 3 : 7);
     ctx.stroke();
-    if (x % (step * 2) === 0) ctx.fillText(String(Math.round(x)), screenX + 3, 7);
+    if (x % (step * 2) === 0) ctx.fillText(String(Math.round(x)), screenX + 3, 9);
   }
 
   for (let y = startY; y <= endY; y += step) {
@@ -91,11 +93,11 @@ function drawRulers() {
     if (screenY < RULER_SIZE) continue;
     ctx.beginPath();
     ctx.moveTo(RULER_SIZE, screenY + 0.5);
-    ctx.lineTo(y % (step * 2) === 0 ? 4 : 7, screenY + 0.5);
+    ctx.lineTo(y % (step * 2) === 0 ? 3 : 7, screenY + 0.5);
     ctx.stroke();
     if (y % (step * 2) !== 0) continue;
     ctx.save();
-    ctx.translate(6, screenY - 3);
+    ctx.translate(8, screenY - 3);
     ctx.rotate(-Math.PI / 2);
     ctx.fillText(String(Math.round(y)), 0, 0);
     ctx.restore();
@@ -261,6 +263,23 @@ function drawRectHandles(item) {
   ctx.restore();
 }
 
+function drawRoundedRectPath(left, top, right, bottom, tl, tr, br, bl) {
+  ctx.moveTo(left + tl, top);
+  ctx.lineTo(right - tr, top);
+  if (tr) ctx.arcTo(right, top, right, top + tr, tr);
+  else ctx.lineTo(right, top);
+  ctx.lineTo(right, bottom - br);
+  if (br) ctx.arcTo(right, bottom, right - br, bottom, br);
+  else ctx.lineTo(right, bottom);
+  ctx.lineTo(left + bl, bottom);
+  if (bl) ctx.arcTo(left, bottom, left, bottom - bl, bl);
+  else ctx.lineTo(left, bottom);
+  ctx.lineTo(left, top + tl);
+  if (tl) ctx.arcTo(left, top, left + tl, top, tl);
+  else ctx.lineTo(left, top);
+  ctx.closePath();
+}
+
 function drawRectPath(item, topLeft, bottomRight) {
   const width = bottomRight.x - topLeft.x;
   const height = bottomRight.y - topLeft.y;
@@ -279,16 +298,7 @@ function drawRectPath(item, topLeft, bottomRight) {
   const top = topLeft.y;
   const right = bottomRight.x;
   const bottom = bottomRight.y;
-  ctx.moveTo(left + tl, top);
-  ctx.lineTo(right - tr, top);
-  ctx.quadraticCurveTo(right, top, right, top + tr);
-  ctx.lineTo(right, bottom - br);
-  ctx.quadraticCurveTo(right, bottom, right - br, bottom);
-  ctx.lineTo(left + bl, bottom);
-  ctx.quadraticCurveTo(left, bottom, left, bottom - bl);
-  ctx.lineTo(left, top + tl);
-  ctx.quadraticCurveTo(left, top, left + tl, top);
-  ctx.closePath();
+  drawRoundedRectPath(left, top, right, bottom, tl, tr, br, bl);
 }
 
 function drawRectPadding(item) {
@@ -296,8 +306,11 @@ function drawRectPadding(item) {
   const padding = rectPadding(item);
   if (!padding.top && !padding.right && !padding.bottom && !padding.left) return;
   const inner = paddingInnerRect(item);
+  const outer = normalizedRect(item);
   const topLeft = toScreenPoint({ x: inner.x, y: inner.y });
   const bottomRight = toScreenPoint({ x: inner.x + inner.w, y: inner.y + inner.h });
+  const outerTopLeft = toScreenPoint({ x: outer.x, y: outer.y });
+  const outerBottomRight = toScreenPoint({ x: outer.x + outer.w, y: outer.y + outer.h });
   ctx.save();
   ctx.setLineDash([4, 4]);
   ctx.lineWidth = 1;
@@ -308,20 +321,33 @@ function drawRectPadding(item) {
     Math.round(bottomRight.x - topLeft.x),
     Math.round(bottomRight.y - topLeft.y),
   );
-  if (item.id === state.selectedId) drawPaddingBadges(item, padding, topLeft, bottomRight);
+  if (item.id === state.selectedId) drawPaddingBadges(item, padding, topLeft, bottomRight, outerTopLeft, outerBottomRight);
   ctx.restore();
 }
 
-function drawPaddingBadges(item, padding, topLeft, bottomRight) {
-  const centerX = (topLeft.x + bottomRight.x) / 2;
-  const centerY = (topLeft.y + bottomRight.y) / 2;
+function drawPaddingBadges(item, padding, topLeft, bottomRight, outerTopLeft, outerBottomRight) {
+  const outerWidth = Math.abs(outerBottomRight.x - outerTopLeft.x);
+  const outerHeight = Math.abs(outerBottomRight.y - outerTopLeft.y);
+  const activePaddingSide = state.drag?.type === "paddingHandle" && state.drag.item?.id === item.id
+    ? state.drag.handle
+    : null;
+  const compact = outerWidth < 115 || outerHeight < 58;
+  if (compact && !activePaddingSide) return;
+
+  const outerCenterX = (outerTopLeft.x + outerBottomRight.x) / 2;
+  const outerCenterY = (outerTopLeft.y + outerBottomRight.y) / 2;
+  const labelNudge = compact ? 22 : 18;
+  const verticalLabelX = outerCenterX + labelNudge;
+  const sideLabelY = outerCenterY + labelNudge;
   const labels = [
-    padding.top ? { text: displayNumber(toDisplayValue(padding.top, "y", item)), x: centerX, y: topLeft.y - 8, anchor: "bottom" } : null,
-    padding.right ? { text: displayNumber(toDisplayValue(padding.right, "x", item)), x: bottomRight.x + 7, y: centerY, anchor: "left" } : null,
-    padding.bottom ? { text: displayNumber(toDisplayValue(padding.bottom, "y", item)), x: centerX, y: bottomRight.y + 8, anchor: "top" } : null,
-    padding.left ? { text: displayNumber(toDisplayValue(padding.left, "x", item)), x: topLeft.x - 7, y: centerY, anchor: "right" } : null,
+    padding.top ? { side: "top", text: displayNumber(toDisplayValue(padding.top, "y", item)), x: verticalLabelX, y: (outerTopLeft.y + topLeft.y) / 2 } : null,
+    padding.right ? { side: "right", text: displayNumber(toDisplayValue(padding.right, "x", item)), x: (bottomRight.x + outerBottomRight.x) / 2, y: sideLabelY } : null,
+    padding.bottom ? { side: "bottom", text: displayNumber(toDisplayValue(padding.bottom, "y", item)), x: verticalLabelX, y: (bottomRight.y + outerBottomRight.y) / 2 } : null,
+    padding.left ? { side: "left", text: displayNumber(toDisplayValue(padding.left, "x", item)), x: (outerTopLeft.x + topLeft.x) / 2, y: sideLabelY } : null,
   ].filter(Boolean);
-  for (const label of labels) drawPaddingBadge(label);
+  for (const label of labels) {
+    if (!compact || label.side === activePaddingSide) drawPaddingBadge(label);
+  }
 }
 
 function drawPaddingBadge({ text, x, y, anchor }) {
@@ -337,6 +363,14 @@ function drawPaddingBadge({ text, x, y, anchor }) {
   if (anchor === "right") left = x - width;
   if (anchor === "top") top = y;
   if (anchor === "bottom") top = y - height;
+  if (anchor === "top-left") {
+    left = x;
+    top = y;
+  }
+  if (anchor === "top-right") {
+    left = x - width;
+    top = y;
+  }
   const size = screenSize();
   left = Math.round(clamp(left, RULER_SIZE + 2, size.width - width - 2));
   top = Math.round(clamp(top, RULER_SIZE + 2, size.height - height - 2));
@@ -463,16 +497,7 @@ function drawLabel(text, x, y, selected = false, selectedColor = state.settings.
 
 function roundedRect(x, y, width, height, radius) {
   ctx.beginPath();
-  ctx.moveTo(x + radius, y);
-  ctx.lineTo(x + width - radius, y);
-  ctx.quadraticCurveTo(x + width, y, x + width, y + radius);
-  ctx.lineTo(x + width, y + height - radius);
-  ctx.quadraticCurveTo(x + width, y + height, x + width - radius, y + height);
-  ctx.lineTo(x + radius, y + height);
-  ctx.quadraticCurveTo(x, y + height, x, y + height - radius);
-  ctx.lineTo(x, y + radius);
-  ctx.quadraticCurveTo(x, y, x + radius, y);
-  ctx.closePath();
+  drawRoundedRectPath(x, y, x + width, y + height, radius, radius, radius, radius);
 }
 
 function shouldShowLoupe() {
@@ -541,16 +566,7 @@ function drawLoupeMeasurementOverlay(origin, imagePoint, pixel) {
       ctx.lineWidth = 1;
       ctx.beginPath();
       if (tl || tr || br || bl) {
-        ctx.moveTo(left + tl, top);
-        ctx.lineTo(right - tr, top);
-        ctx.quadraticCurveTo(right, top, right, top + tr);
-        ctx.lineTo(right, bottom - br);
-        ctx.quadraticCurveTo(right, bottom, right - br, bottom);
-        ctx.lineTo(left + bl, bottom);
-        ctx.quadraticCurveTo(left, bottom, left, bottom - bl);
-        ctx.lineTo(left, top + tl);
-        ctx.quadraticCurveTo(left, top, left + tl, top);
-        ctx.closePath();
+        drawRoundedRectPath(left, top, right, bottom, tl, tr, br, bl);
       } else {
         ctx.rect(Math.round(left) + 0.5, Math.round(top) + 0.5, Math.round(right - left), Math.round(bottom - top));
       }

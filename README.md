@@ -62,6 +62,8 @@ http://127.0.0.1:4173/
 - `Enter`: Apply current crop
 - `Cmd/Ctrl + Z`: Undo recent drawing, crop, guide, swatch, import, clear or image replacement actions
 - `Delete` / `Backspace`: Delete selected measurement, guide or color swatch
+- `Cmd/Ctrl + S`: Save the project (writes back to its file where supported; a fresh download otherwise)
+- `Cmd/Ctrl + Shift + S`: Save the project as a new file
 - `0`: Back to 100% and recenter the image (numpad zero, or the top-row zero, which needs `Shift` on AZERTY)
 - `Cmd/Ctrl + 0`: Fit to screen
 - `Cmd/Ctrl + 1`: Back to 100% and recenter, same as `0`
@@ -86,12 +88,38 @@ Guides work like in design tools:
 - Select and drag an existing guide to move it.
 - Drag a guide outside the image or press `Delete` to remove it.
 
+## Saving a Project
+
+A `.pixelperfect` file is a zip archive holding the image and every measurement,
+guide and swatch. Saving it is two different things depending on the browser:
+
+- **Chrome and Edge** can write to a file on disk directly (the File System
+  Access API). The first save shows a picker; every save after that writes back
+  to the same file in place, no picker, no growing pile of copies in
+  Downloads. `Cmd/Ctrl + Shift + S` picks a different file.
+- **Firefox and Safari** don't expose that API at all, so saving is a plain
+  download of a new `.pixelperfect` file each time — the only thing a web page
+  can do there.
+
+The status bar shows **Saved** once the project is written, or **• Unsaved**
+after any change. Closing the tab with unsaved changes asks for confirmation.
+
+Autosave is a separate, smaller safety net, not a replacement for saving: it
+keeps the current annotations for the current image so a crash or an accidental
+reload doesn't lose everything, but it is browser storage, which the browser is
+free to clear under storage pressure. The `.pixelperfect` file is the actual
+document.
+
 ## Local Data
 
 Pixel Perfect stores data only in the browser:
 
 - Measurements, guides, swatches and settings are stored in `localStorage`.
-- Recent project images are stored in `IndexedDB`.
+- Recent projects are stored in `IndexedDB`: a project opened or saved through
+  the file picker is remembered as a pointer to that file, so reopening it asks
+  to read the file itself and never goes stale; a project without picker
+  support is remembered as a full copy of the image, capped at 3 recents to
+  keep storage bounded.
 
 No image or measurement data is sent anywhere.
 

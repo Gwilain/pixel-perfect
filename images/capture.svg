@@ -1,5 +1,28 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" aria-hidden="true">
-  <path d="M4 7.5h3l1.5-2h7l1.5 2h3v11H4z" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linejoin="round"/>
-  <circle cx="12" cy="13" r="3.5" fill="none" stroke="currentColor" stroke-width="1.8"/>
-  <path d="M18 10h.01" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"/>
+<?xml version="1.0" encoding="UTF-8"?>
+<svg id="Layer_1" xmlns="http://www.w3.org/2000/svg" version="1.1" viewBox="0 0 24 24">
+  <!-- Generator: Adobe Illustrator 30.7.0, SVG Export Plug-In . SVG Version: 2.1.4 Build 114)  -->
+  <defs>
+    <style>
+      .st0 {
+        stroke-linecap: round;
+        stroke-width: 2.4px;
+      }
+
+      .st0, .st1, .st2 {
+        fill: none;
+        stroke: #fff;
+      }
+
+      .st1, .st2 {
+        stroke-width: 1.8px;
+      }
+
+      .st2 {
+        stroke-linejoin: round;
+      }
+    </style>
+  </defs>
+  <path class="st2" d="M2.1,6.4h3.7l1.9-2.5h8.7l1.9,2.5h3.7v13.6H2.1V6.4Z"/>
+  <circle class="st1" cx="12" cy="13.2" r="4.3"/>
+  <path class="st0" d="M19.4,9.5h0"/>
 </svg>

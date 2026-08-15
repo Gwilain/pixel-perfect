@@ -18,11 +18,36 @@ function resetProject() {
   state.viewport = { scale: 1, x: 0, y: 0 };
   state.theoryWidth = null;
   state.theoryHeight = null;
+  detachProjectFile();
   syncTheoryInputs();
   elements.emptyState.hidden = false;
   renderRecentProjects();
   updateStatus();
   render();
+}
+
+// Autosave is a safety net; the project file is the document. These two track
+// whether the document has drifted from the file, which is what the status bar
+// shows and what the close warning is based on.
+function markDirty() {
+  if (state.isDirty) return;
+  state.isDirty = true;
+  updateStatus();
+}
+
+function markSaved(fileName = state.fileName) {
+  state.fileName = fileName || "";
+  state.isDirty = false;
+  elements.hintInfo.textContent = state.fileName ? `Saved to ${state.fileName}.` : "Project saved.";
+  updateStatus();
+}
+
+// Opening a different image starts a new document, so it must not keep writing
+// over the previous project's file.
+function detachProjectFile() {
+  state.fileHandle = null;
+  state.fileName = "";
+  state.isDirty = false;
 }
 
 function hasClearableContent() {
@@ -96,12 +121,30 @@ async function undo() {
 async function loadImageFile(file) {
   if (!file || !file.type.startsWith("image/")) return;
   await pushUndoBeforeImageChange();
+  detachProjectFile();
   await loadImageBlob(file, file.name || "Untitled image");
 }
 
-function droppedImageFile(dataTransfer) {
+function isProjectFile(file) {
+  return Boolean(file && (
+    file.name?.toLowerCase().endsWith(".pixelperfect") ||
+      file.type === "application/zip" ||
+      file.type === "application/x-zip-compressed"
+  ));
+}
+
+async function openFile(file) {
+  if (!file) return;
+  if (isProjectFile(file)) {
+    await openProjectFile(file);
+    return;
+  }
+  await loadImageFile(file);
+}
+
+function droppedProjectFile(dataTransfer) {
   const files = [...(dataTransfer?.files ?? [])];
-  return files.find((file) => file.type.startsWith("image/")) ?? null;
+  return files.find((file) => isProjectFile(file) || file.type.startsWith("image/")) ?? null;
 }
 
 function hasFileDrop(dataTransfer) {
@@ -143,7 +186,7 @@ async function loadImageBlob(blob, name, options = {}) {
   renderRecentProjects();
   fitToScreen();
   if (options.saveRecent !== false) {
-    await saveRecentProject(blob, name, bitmap.width, bitmap.height);
+    await rememberRecent({ blob, name });
   }
   updateStatus();
 }
@@ -176,6 +219,7 @@ async function captureScreen() {
     const blob = await new Promise((resolve) => snapshotCanvas.toBlob(resolve, "image/png"));
     if (!blob) throw new Error("Snapshot failed");
     await pushUndoBeforeImageChange();
+    detachProjectFile();
     await loadImageBlob(blob, `Capture ${new Date().toLocaleString("en-US")}.png`);
   } catch (error) {
     if (error.name !== "NotAllowedError") {
@@ -199,6 +243,8 @@ async function applyCrop() {
   if (!blob) return;
   state.crop = null;
   await loadImageBlob(blob, `Cropped ${state.imageName || "image"}.png`);
+  // The image itself changed, which loadImageBlob does not persist on its own.
+  markDirty();
 }
 
 function openProjectDatabase() {
@@ -246,10 +292,26 @@ async function deleteImageRecord(id) {
   db.close();
 }
 
+// Handle-backed entries cost a pointer, blob-backed ones cost a full image, so
+// they get very different allowances.
+function trimRecentProjects(projects) {
+  const kept = [];
+  let blobBacked = 0;
+  for (const project of projects) {
+    if (kept.length >= RECENT_LIMIT) break;
+    if (project.kind !== "project") {
+      if (blobBacked >= RECENT_BLOB_LIMIT) continue;
+      blobBacked += 1;
+    }
+    kept.push(project);
+  }
+  return kept;
+}
+
 function readRecentProjects() {
   try {
     const projects = JSON.parse(localStorage.getItem(RECENT_PROJECTS_KEY) ?? "[]");
-    return Array.isArray(projects) ? projects.slice(0, RECENT_PROJECT_LIMIT) : [];
+    return Array.isArray(projects) ? trimRecentProjects(projects) : [];
   } catch {
     localStorage.removeItem(RECENT_PROJECTS_KEY);
     return [];
@@ -258,7 +320,7 @@ function readRecentProjects() {
 
 function writeRecentProjects(projects) {
   const previousIds = state.recentProjects.map((project) => project.id);
-  state.recentProjects = projects.slice(0, RECENT_PROJECT_LIMIT);
+  state.recentProjects = trimRecentProjects(projects);
   const keptIds = new Set(state.recentProjects.map((project) => project.id));
   writeStorageValue(RECENT_PROJECTS_KEY, JSON.stringify(state.recentProjects));
   // Evicted projects used to leave their full-size blob in IndexedDB forever.
@@ -282,21 +344,39 @@ function createThumbnail() {
   return thumbCanvas.toDataURL("image/jpeg", 0.78);
 }
 
-async function saveRecentProject(blob, name, width, height) {
+// A file handle is structured-cloneable, so IndexedDB can hold it directly and
+// the recent becomes a pointer to the file on disk rather than a copy of it.
+async function rememberRecent({ blob = null, handle = null, name }) {
+  if (!state.image) return;
   const id = state.imageSignature;
-  const thumbnail = createThumbnail();
+  const updatedAt = Date.now();
+  const kind = handle ? "project" : "image";
+  const record = handle
+    ? { id, handle, name, kind, updatedAt }
+    : { id, blob, name, kind, type: blob.type, updatedAt };
   try {
-    await putImageRecord({ id, blob, name, width, height, type: blob.type, updatedAt: Date.now() });
+    await putImageRecord(record);
   } catch {
     // Private browsing or a full disk: the image is loaded, it just is not remembered.
     elements.hintInfo.textContent = "This project could not be added to recents.";
     return;
   }
-  const nextProjects = [
-    { id, name, width, height, thumbnail, updatedAt: Date.now() },
+  writeRecentProjects([
+    {
+      id,
+      name,
+      kind,
+      width: state.image.width,
+      height: state.image.height,
+      thumbnail: createThumbnail(),
+      updatedAt,
+    },
     ...state.recentProjects.filter((project) => project.id !== id),
-  ].slice(0, RECENT_PROJECT_LIMIT);
-  writeRecentProjects(nextProjects);
+  ]);
+}
+
+function forgetRecent(id) {
+  writeRecentProjects(state.recentProjects.filter((project) => project.id !== id));
 }
 
 async function reopenRecentProject(id) {
@@ -308,9 +388,28 @@ async function reopenRecentProject(id) {
     return;
   }
   if (!record) {
-    writeRecentProjects(state.recentProjects.filter((project) => project.id !== id));
+    forgetRecent(id);
     return;
   }
+
+  if (record.handle) {
+    if (!(await ensureHandlePermission(record.handle, "read"))) {
+      elements.hintInfo.textContent = "Permission to read that file was refused.";
+      return;
+    }
+    let file = null;
+    try {
+      file = await record.handle.getFile();
+    } catch {
+      // The file was moved, renamed or deleted since it was last opened.
+      elements.hintInfo.textContent = `${record.name} is no longer where it was saved.`;
+      forgetRecent(id);
+      return;
+    }
+    await openProjectFile(file, record.handle);
+    return;
+  }
+
   await pushUndoBeforeImageChange();
   await loadImageBlob(record.blob, record.name, { saveRecent: true });
 }
@@ -527,6 +626,9 @@ function hasStoredProjectData() {
 }
 
 function persist() {
+  // Every project mutation funnels through here, so this is where the document
+  // is known to have drifted from its file.
+  markDirty();
   if (!state.imageSignature) return;
   localStorage.removeItem(legacyMeasureKey());
   if (!hasStoredProjectData()) {
@@ -581,10 +683,13 @@ function restoreFromStorage() {
   }
 }
 
-function exportMeasurements() {
-  const payload = {
+function projectPayload(imageFile) {
+  return {
     version: 1,
+    app: "Pixel Perfect",
+    savedAt: new Date().toISOString(),
     image: {
+      file: imageFile,
       name: state.imageName,
       width: state.image?.width ?? 0,
       height: state.image?.height ?? 0,
@@ -599,32 +704,168 @@ function exportMeasurements() {
     guides: state.guides,
     swatches: state.swatches,
   };
-  const blob = new Blob([JSON.stringify(payload, null, 2)], { type: "application/json" });
+}
+
+function projectBaseName() {
+  const raw = (state.imageName || "pixel-perfect-project").replace(/\.[^.]+$/, "");
+  return raw.replace(/[<>:"/\\|?*\x00-\x1f]+/g, "-").trim() || "pixel-perfect-project";
+}
+
+function canvasPngBlob() {
+  return new Promise((resolve) => {
+    state.imageCanvas.toBlob((blob) => resolve(blob), "image/png");
+  });
+}
+
+const PROJECT_FILE_TYPES = [
+  { description: "Pixel Perfect project", accept: { "application/zip": [".pixelperfect"] } },
+];
+
+// Chromium desktop only. Firefox and Safari expose no disk picker at all, so
+// everything below falls back to a plain download for them.
+function supportsFilePicker() {
+  return typeof window.showSaveFilePicker === "function";
+}
+
+// A handle restored from IndexedDB in a later session starts unauthorised, and
+// the prompt only works from a user gesture, which is why this is called from
+// click and keyboard handlers rather than on load.
+async function ensureHandlePermission(handle, mode = "readwrite") {
+  if (typeof handle?.queryPermission !== "function") return true;
+  try {
+    if ((await handle.queryPermission({ mode })) === "granted") return true;
+    return (await handle.requestPermission({ mode })) === "granted";
+  } catch {
+    return false;
+  }
+}
+
+async function buildProjectBlob() {
+  if (!window.fflate?.zipSync || !window.fflate?.strToU8) return null;
+  const imageBlob = await canvasPngBlob();
+  if (!imageBlob) return null;
+  const imageFile = "image.png";
+  const files = {
+    "project.json": fflate.strToU8(JSON.stringify(projectPayload(imageFile), null, 2)),
+    [imageFile]: new Uint8Array(await imageBlob.arrayBuffer()),
+  };
+  return new Blob([fflate.zipSync(files, { level: 6 })], { type: "application/zip" });
+}
+
+function downloadProjectBlob(blob) {
   const anchor = document.createElement("a");
   anchor.href = URL.createObjectURL(blob);
-  anchor.download = `${state.imageName || "measurements"}.json`;
+  anchor.download = `${projectBaseName()}.pixelperfect`;
   anchor.click();
   URL.revokeObjectURL(anchor.href);
 }
 
-async function importMeasurements(file) {
-  if (!file) return;
-  let payload = null;
+async function saveProject(options = {}) {
+  if (!state.image || !state.imageCanvas.width || !state.imageCanvas.height) {
+    elements.hintInfo.textContent = "Open or capture an image before saving a project.";
+    return;
+  }
+  const blob = await buildProjectBlob();
+  if (!blob) {
+    elements.hintInfo.textContent = "Save failed: the project could not be packaged.";
+    return;
+  }
+
+  if (!supportsFilePicker()) {
+    downloadProjectBlob(blob);
+    markSaved(`${projectBaseName()}.pixelperfect`);
+    return;
+  }
+
+  let handle = options.saveAs ? null : state.fileHandle;
   try {
-    payload = JSON.parse(await file.text());
+    handle ??= await window.showSaveFilePicker({
+      suggestedName: `${projectBaseName()}.pixelperfect`,
+      types: PROJECT_FILE_TYPES,
+    });
+    if (!(await ensureHandlePermission(handle))) {
+      elements.hintInfo.textContent = "Not saved: permission to write that file was refused.";
+      return;
+    }
+    const writable = await handle.createWritable();
+    await writable.write(blob);
+    await writable.close();
+  } catch (error) {
+    if (error?.name === "AbortError") return;
+    elements.hintInfo.textContent = "Save failed: the file could not be written.";
+    return;
+  }
+
+  state.fileHandle = handle;
+  markSaved(handle.name);
+  await rememberRecent({ handle, name: handle.name });
+}
+
+async function openWithPicker() {
+  if (typeof window.showOpenFilePicker !== "function") {
+    elements.fileInput.click();
+    return;
+  }
+  let handle = null;
+  try {
+    [handle] = await window.showOpenFilePicker({
+      multiple: false,
+      types: [
+        ...PROJECT_FILE_TYPES,
+        { description: "Images", accept: { "image/*": [".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp"] } },
+      ],
+    });
+  } catch (error) {
+    if (error?.name !== "AbortError") elements.fileInput.click();
+    return;
+  }
+  const file = await handle.getFile();
+  if (isProjectFile(file)) await openProjectFile(file, handle);
+  else await loadImageFile(file);
+}
+
+async function openProjectFile(file, handle = null) {
+  if (!window.fflate?.unzipSync || !window.fflate?.strFromU8) {
+    elements.hintInfo.textContent = "Open failed: the zip library is unavailable.";
+    return;
+  }
+  let files;
+  try {
+    files = fflate.unzipSync(new Uint8Array(await file.arrayBuffer()));
   } catch {
-    elements.hintInfo.textContent = "Import failed: this file is not valid JSON.";
+    elements.hintInfo.textContent = "Open failed: this .pixelperfect file is not valid.";
     return;
   }
-  if (!payload || typeof payload !== "object") {
-    elements.hintInfo.textContent = "Import failed: unexpected file content.";
+  const manifestBytes = files["project.json"];
+  if (!manifestBytes) {
+    elements.hintInfo.textContent = "Open failed: project.json is missing.";
     return;
   }
-  pushUndo();
+  let payload;
+  try {
+    payload = JSON.parse(fflate.strFromU8(manifestBytes));
+  } catch {
+    elements.hintInfo.textContent = "Open failed: project.json is invalid.";
+    return;
+  }
+  const imagePath = payload?.image?.file;
+  const imageBytes = imagePath ? files[imagePath] : null;
+  if (!imageBytes) {
+    elements.hintInfo.textContent = "Open failed: project image is missing.";
+    return;
+  }
+  await pushUndoBeforeImageChange();
+  const imageName = payload.image.name || imagePath || "Project image.png";
+  await loadImageBlob(new Blob([imageBytes], { type: "image/png" }), imageName, {
+    restoreStored: false,
+  });
   applyProjectPayload(payload);
   state.selectedId = null;
   persist();
-  updateStatus();
   render();
+  // Bind the session to the file it came from, so Ctrl+S writes back in place.
+  state.fileHandle = handle;
+  markSaved(handle?.name ?? file.name);
+  elements.hintInfo.textContent = `Opened ${file.name}.`;
+  if (handle) await rememberRecent({ handle, name: handle.name });
 }
-

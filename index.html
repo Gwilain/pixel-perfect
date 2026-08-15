@@ -17,10 +17,13 @@
         <button id="openButton" class="icon-button" type="button" title="Open image" aria-label="Open">
           <img src="./images/open.svg" alt="" />
         </button>
+        <button id="saveButton" class="icon-button" type="button" title="Save project" aria-label="Save project">
+          <img src="./images/save.svg" alt="" />
+        </button>
         <button id="captureButton" class="icon-button" type="button" title="Capture a browser tab or window" aria-label="Capture">
           <img src="./images/capture.svg" alt="" />
         </button>
-        <input id="fileInput" type="file" accept="image/*" hidden />
+        <input id="fileInput" type="file" accept="image/*,.pixelperfect,application/zip" hidden />
       </div>
 
       <div class="group" role="toolbar" aria-label="Tools">
@@ -76,9 +79,6 @@
       </div>
 
       <div class="group group-right">
-        <button id="exportJson" type="button" title="Export measurements as JSON">Export</button>
-        <button id="importJson" type="button" title="Import measurements from JSON">Import</button>
-        <input id="jsonInput" type="file" accept="application/json,.json" hidden />
         <div class="settings">
           <button id="settingsButton" type="button" title="Settings" aria-label="Settings" aria-haspopup="true" aria-expanded="false">&#8942;</button>
           <section id="settingsPanel" class="settings-panel" aria-label="Settings" hidden>
@@ -193,10 +193,13 @@
                 <div class="property-subsection">
                   <div class="property-subsection-header">
                     <div class="property-subtitle">Padding</div>
-                    <div class="mode-toggle" aria-label="Padding mode">
-                      <button type="button" data-padding-mode="all">All</button>
-                      <button type="button" data-padding-mode="axis">Axis</button>
-                      <button type="button" data-padding-mode="free">Free</button>
+                    <div class="property-actions">
+                      <button id="toggleAutoPadding" class="property-action-button" type="button" title="Add automatic padding" aria-label="Add automatic padding">+</button>
+                      <div class="mode-toggle" aria-label="Padding mode">
+                        <button type="button" data-padding-mode="all">All</button>
+                        <button type="button" data-padding-mode="axis">Axis</button>
+                        <button type="button" data-padding-mode="free">Free</button>
+                      </div>
                     </div>
                   </div>
                   <div class="padding-panel" aria-label="Selected padding">
@@ -277,6 +280,7 @@
     </aside>
 
     <footer class="statusbar">
+      <span id="saveInfo" class="save-info"></span>
       <span id="imageInfo">Image: -</span>
       <span class="zoom-control">
         <button id="zoomOut" type="button" title="Zoom out around center">-</button>
@@ -298,7 +302,7 @@
       <section class="info-dialog" role="dialog" aria-modal="true" aria-labelledby="infoTitle">
         <div class="info-dialog-header">
           <h2 id="infoTitle">About Pixel Perfect</h2>
-          <button id="closeInfo" type="button" aria-label="Close about panel">Close</button>
+          <button id="closeInfo" class="dialog-close" type="button" aria-label="Close about panel">×</button>
         </div>
         <div class="info-dialog-body">
           <p>Pixel Perfect is a local-first measurement tool created by Ghislain Gillet.</p>
@@ -313,7 +317,7 @@
       <section class="info-dialog" role="dialog" aria-modal="true" aria-labelledby="captureTitle">
         <div class="info-dialog-header">
           <h2 id="captureTitle">Capture a tab</h2>
-          <button id="cancelCapture" type="button" aria-label="Cancel capture">Cancel</button>
+          <button id="cancelCapture" class="dialog-close" type="button" aria-label="Cancel capture">×</button>
         </div>
         <div class="info-dialog-body">
           <p>The browser will ask you to choose a tab, window, or screen to capture.</p>
@@ -330,7 +334,7 @@
       <section class="info-dialog" role="alertdialog" aria-modal="true" aria-labelledby="clearTitle" aria-describedby="clearMessage">
         <div class="info-dialog-header">
           <h2 id="clearTitle">Clear everything?</h2>
-          <button id="cancelClear" type="button" aria-label="Cancel">Cancel</button>
+          <button id="cancelClear" class="dialog-close" type="button" aria-label="Cancel">×</button>
         </div>
         <div class="info-dialog-body">
           <p id="clearMessage">This removes every element, guide and colour swatch from this image, and the crop if there is one. The image itself is kept.</p>
@@ -345,6 +349,7 @@
     <!-- Load order follows the dependency graph: scheduler and core depend on
          nothing, main.js runs the bootstrap once everything is declared. -->
     <script defer src="./js/scheduler.js"></script>
+    <script defer src="./vendor/fflate.js"></script>
     <script defer src="./js/core.js"></script>
     <script defer src="./js/app.js"></script>
     <script defer src="./js/project.js"></script>

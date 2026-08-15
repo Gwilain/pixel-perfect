@@ -310,7 +310,9 @@ function radiusFromPoint(item, corner, imagePoint) {
   const bottom = rect.y + rect.h;
   const dx = corner === "tr" || corner === "br" ? right - imagePoint.x : imagePoint.x - rect.x;
   const dy = corner === "bl" || corner === "br" ? bottom - imagePoint.y : imagePoint.y - rect.y;
-  const radius = clamp(Math.min(dx, dy), 0, maxRectRadius(item));
+  const maxRadius = maxRectRadius(item);
+  const radius = clamp(Math.min(dx, dy), 0, maxRadius);
+  if (maxRadius - radius <= 1) return maxRadius;
   return state.pixelPerfectMode ? Math.round(radius) : round(radius);
 }
 
@@ -358,12 +360,20 @@ function applyPaddingHandle(item, side, original, imagePoint) {
   }
 }
 
+function guideCursor(guide) {
+  return guide?.orientation === "vertical" ? "ew-resize" : "ns-resize";
+}
+
 function updateCanvasCursor(screenPoint) {
   if (state.spacePressed || state.drag?.type === "pan") {
     canvas.style.cursor = "grab";
     return;
   }
-  if (state.drag?.type === "guide" || state.drag?.type === "distanceHandle" || state.drag?.type === "radiusHandle") {
+  if (state.drag?.type === "guide") {
+    canvas.style.cursor = guideCursor(state.drag.item);
+    return;
+  }
+  if (state.drag?.type === "distanceHandle" || state.drag?.type === "radiusHandle") {
     canvas.style.cursor = "move";
     return;
   }
@@ -400,7 +410,7 @@ function hitTest(screenPoint) {
   for (let i = state.guides.length - 1; i >= 0; i -= 1) {
     const guide = state.guides[i];
     const delta = guide.orientation === "vertical" ? Math.abs(imagePoint.x - guide.value) : Math.abs(imagePoint.y - guide.value);
-    if (delta <= tolerance) return { type: "guide", item: guide };
+    if (delta <= tolerance) return { type: "guide", item: guide, cursor: guideCursor(guide) };
   }
 
   for (let i = state.measurements.length - 1; i >= 0; i -= 1) {
@@ -453,10 +463,26 @@ function cancelAction() {
   render();
 }
 
+// Silent when there is nothing to say: no image, or a file that is up to date
+// and was never explicitly saved this session.
+function renderSaveState() {
+  if (!elements.saveInfo) return;
+  const dirty = Boolean(state.image) && state.isDirty;
+  const text = dirty ? "• Unsaved" : state.fileName ? "Saved" : "";
+  if (elements.saveInfo.textContent !== text) elements.saveInfo.textContent = text;
+  elements.saveInfo.classList.toggle("is-dirty", dirty);
+  elements.saveInfo.title = state.fileName
+    ? `${dirty ? "Unsaved changes to" : "Saved to"} ${state.fileName}`
+    : dirty
+      ? "Unsaved changes. Cmd/Ctrl+S to save a project file."
+      : "";
+}
+
 function updateStatus() {
   elements.imageInfo.textContent = state.image
     ? `Image: ${state.image.width} x ${state.image.height} px`
     : "Image: -";
+  renderSaveState();
   if (document.activeElement !== elements.zoomInfo) {
     // Reported against the theoretical size, like every other measurement in the
     // app, so 100% always means one theoretical pixel per screen pixel.
@@ -475,4 +501,3 @@ function updateStatus() {
     elements.colorInfo.style.color = "";
   }
 }
-

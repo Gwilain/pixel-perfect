@@ -1,8 +1,10 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Generator: Adobe Illustrator 30.7.0, SVG Export Plug-In . SVG Version: 9.03 Build 0)  -->
 <svg version="1.1" baseProfile="tiny" id="Layer_1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink"
-	 x="0px" y="0px" width="50px" height="50px" viewBox="0 0 50 50" overflow="visible" xml:space="preserve">
-<path stroke="#FFFFFF" stroke-linecap="round" stroke-linejoin="round" stroke-miterlimit="10" d="M1.8905,1.8905l16.9031,44.7063
-	c0.582,1.5392,2.6117,2.0583,3.2358,0.8276l8.3641-16.4953c0.1182-0.2332,0.3024-0.4174,0.5356-0.5356l16.4953-8.3641
-	c1.2307-0.6241,0.7116-2.6538-0.8276-3.2358L1.8905,1.8905z"/>
+	 x="0px" y="0px" viewBox="0 0 24 24" style="overflow:visible;" xml:space="preserve">
+<style type="text/css">
+	.st0{fill:#FFFFFF;}
+</style>
+<path class="st0" d="M3.1,3.1l6.5,17.1c0.2,0.6,1,0.8,1.2,0.3l3.2-6.3c0-0.1,0.1-0.2,0.2-0.2l6.3-3.2c0.5-0.2,0.3-1-0.3-1.2L3.1,3.1
+	z"/>
 </svg>

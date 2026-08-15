@@ -86,6 +86,20 @@ input {
   flex: 1 1 auto;
 }
 
+.save-info {
+  flex: 0 0 auto;
+  color: var(--muted);
+}
+
+.save-info:empty {
+  display: none;
+}
+
+.save-info.is-dirty {
+  color: var(--accent);
+  font-weight: 650;
+}
+
 .info-button {
   display: inline-flex;
   flex: 0 0 26px;
@@ -177,7 +191,7 @@ input {
 }
 
 .info-dialog {
-  width: min(440px, 100%);
+  width: min(500px, 100%);
   border: 1px solid var(--line);
   border-radius: 8px;
   background: rgba(24, 27, 31, 0.98);
@@ -185,23 +199,48 @@ input {
 }
 
 .info-dialog-header {
+  position: relative;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-  padding: 10px 12px;
-  border-bottom: 1px solid var(--line);
+  justify-content: center;
+  min-height: 62px;
+  padding: 24px 64px 10px;
+  text-align: center;
 }
 
 .info-dialog-header h2 {
   margin: 0;
   color: var(--text);
-  font-size: 14px;
-  font-weight: 650;
+  font-size: 16px;
+  font-weight: 700;
+}
+
+.dialog-close {
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 30px;
+  min-width: 30px;
+  height: 30px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--muted);
+  font-size: 24px;
+  line-height: 1;
+}
+
+.dialog-close:hover {
+  background: #252a31;
+  color: var(--text);
 }
 
 .info-dialog-body {
-  padding: 12px;
+  padding: 22px 36px 24px;
   color: var(--text);
   line-height: 1.45;
 }
@@ -226,8 +265,21 @@ input {
 
 .info-dialog-actions {
   display: flex;
-  justify-content: flex-end;
-  padding: 0 12px 12px;
+  justify-content: center;
+  padding: 8px 36px 34px;
+}
+
+.info-dialog-actions button {
+  min-width: 128px;
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #07100d;
+  font-weight: 750;
+}
+
+.info-dialog-actions button:hover {
+  border-color: color-mix(in srgb, var(--accent) 80%, white);
+  background: color-mix(in srgb, var(--accent) 88%, white);
 }
 
 .settings-title {
@@ -302,8 +354,7 @@ button:hover {
   background: #252a31;
 }
 
-button.is-active,
-.tool.is-active {
+button.is-active {
   border-color: color-mix(in srgb, var(--accent) 70%, white 10%);
   background: color-mix(in srgb, var(--accent) 22%, var(--panel-soft));
   color: white;
@@ -338,6 +389,16 @@ button.is-active,
   height: 18px;
   display: block;
   pointer-events: none;
+}
+
+.tool.is-active {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: #07100d;
+}
+
+.tool.is-active img {
+  filter: brightness(0);
 }
 
 #colorInfo {
@@ -754,6 +815,36 @@ body.containers-opening #toggleContainers svg {
   gap: 8px;
   min-height: 20px;
   margin-bottom: 2px;
+}
+
+.property-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.property-action-button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0;
+  border-radius: 5px;
+  font-size: 13px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.property-action-button:not(:disabled) {
+  border-color: color-mix(in srgb, var(--accent) 55%, var(--line));
+  color: var(--accent);
+}
+
+.property-action-button.is-remove:not(:disabled) {
+  border-color: color-mix(in srgb, var(--danger) 55%, var(--line));
+  color: var(--danger);
 }
 
 .property-subtitle {

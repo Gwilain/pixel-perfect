@@ -342,13 +342,39 @@ function renderPaddingControls() {
   updateModeButtons(elements.paddingModeButtons, disabled ? null : normalizePaddingMode(item.paddingMode));
   if (disabled) {
     for (const input of Object.values(inputs)) setControlValue(input, "");
+    updateAutoPaddingButton(null);
     return;
   }
   const padding = rectPadding(item);
-  setControlValue(inputs.top, displayNumber(padding.top));
-  setControlValue(inputs.right, displayNumber(padding.right));
-  setControlValue(inputs.bottom, displayNumber(padding.bottom));
-  setControlValue(inputs.left, displayNumber(padding.left));
+  setControlValue(inputs.top, displayNumber(toDisplayValue(padding.top, "y", item)));
+  setControlValue(inputs.right, displayNumber(toDisplayValue(padding.right, "x", item)));
+  setControlValue(inputs.bottom, displayNumber(toDisplayValue(padding.bottom, "y", item)));
+  setControlValue(inputs.left, displayNumber(toDisplayValue(padding.left, "x", item)));
+  updateAutoPaddingButton(item);
+}
+
+function hasPadding(item) {
+  const padding = rectPadding(item);
+  return padding.top || padding.right || padding.bottom || padding.left;
+}
+
+function updateAutoPaddingButton(item) {
+  const button = elements.toggleAutoPadding;
+  if (!button) return;
+  const disabled = item?.type !== "rect" || item.id === "crop";
+  button.disabled = disabled;
+  if (disabled) {
+    button.textContent = "+";
+    button.title = "Add automatic padding";
+    button.setAttribute("aria-label", "Add automatic padding");
+    button.classList.remove("is-remove");
+    return;
+  }
+  const remove = hasPadding(item);
+  button.textContent = remove ? "−" : "+";
+  button.title = remove ? "Remove padding" : "Add automatic padding";
+  button.setAttribute("aria-label", remove ? "Remove padding" : "Add automatic padding");
+  button.classList.toggle("is-remove", remove);
 }
 
 function updateModeButtons(buttons, activeMode) {
@@ -513,7 +539,13 @@ function applyPaddingControls(sourceSide = "top", options = {}) {
   }
 
   const mode = normalizePaddingMode(item.paddingMode);
-  const next = paddingByMode(item, values, sourceSide);
+  const internalValues = {
+    top: fromDisplayValue(values.top, "y", item),
+    right: fromDisplayValue(values.right, "x", item),
+    bottom: fromDisplayValue(values.bottom, "y", item),
+    left: fromDisplayValue(values.left, "x", item),
+  };
+  const next = paddingByMode(item, internalValues, sourceSide);
   const current = rectPadding(item);
   if (Object.keys(next).every((side) => Math.round(current[side]) === Math.round(next[side]))) {
     renderPaddingControls();
@@ -524,6 +556,29 @@ function applyPaddingControls(sourceSide = "top", options = {}) {
   item.paddingMode = mode;
   item.padding = next;
   if (!options.live) persist();
+  render();
+}
+
+function autoPaddingValues(item) {
+  return clampRectPaddingValues(item, {
+    top: fromDisplayValue(8, "y", item),
+    right: fromDisplayValue(8, "x", item),
+    bottom: fromDisplayValue(8, "y", item),
+    left: fromDisplayValue(8, "x", item),
+  });
+}
+
+function toggleAutoPadding() {
+  const item = selectedGeometryItem();
+  if (!item || item.type !== "rect" || item.id === "crop") return;
+  pushUndo();
+  if (hasPadding(item)) {
+    item.padding = { top: 0, right: 0, bottom: 0, left: 0 };
+  } else {
+    item.paddingMode = "all";
+    item.padding = autoPaddingValues(item);
+  }
+  persist();
   render();
 }
 
@@ -822,6 +877,8 @@ function initContainersPanel() {
   for (const button of elements.paddingModeButtons ?? []) {
     button.addEventListener("click", () => setPaddingMode(button.dataset.paddingMode));
   }
+
+  elements.toggleAutoPadding?.addEventListener("click", toggleAutoPadding);
 
   document.querySelectorAll(".property-accordion-toggle").forEach((button) => {
     button.addEventListener("click", () => {
