@@ -9,7 +9,7 @@
   </head>
   <body>
     <header class="toolbar">
-      <button id="appIconButton" class="app-icon-button tooltip-down tooltip-left" type="button" data-tooltip="Reset zoom to 100% and center (0)" aria-label="Reset zoom to 100% and center">
+      <button id="appIconButton" class="app-icon-button" type="button" aria-label="Reset zoom to 100% and center">
         <img class="app-icon" src="./images/pixel-perfect.svg" alt="" />
       </button>
       <div class="group">
@@ -89,7 +89,7 @@
               <div></div>
               <div class="color-grid-heading">Normal</div>
               <div class="color-grid-heading">Selected</div>
-              <div class="color-grid-label">Loupe center</div>
+              <div class="color-grid-label">Magnifier center</div>
               <input type="color" data-color-setting="loupeCenter" aria-label="Loupe center color" />
               <div></div>
               <div class="color-grid-label">Rectangle</div>
@@ -102,9 +102,9 @@
               <input type="color" data-color-setting="guide" aria-label="Guide normal color" />
               <input type="color" data-color-setting="guideSelected" aria-label="Guide selected color" />
             </div>
-            <div class="settings-title settings-title-spaced">Loupe</div>
+            <div class="settings-title settings-title-spaced">Magnifier</div>
             <label class="range-setting">
-              <span>Frame</span>
+              <span>Magnifier size</span>
               <input id="loupeFrameSize" type="range" min="17" max="37" step="2" />
               <output id="loupeFrameSizeValue"></output>
             </label>

@@ -330,7 +330,7 @@ function syncSettingsControls() {
     input.value = state.settings[input.dataset.colorSetting] ?? DEFAULT_SETTINGS[input.dataset.colorSetting];
   }
   elements.loupeFrameSize.value = state.settings.loupeFrameSize;
-  elements.loupeFrameSizeValue.textContent = `${state.settings.loupeFrameSize}px view`;
+  elements.loupeFrameSizeValue.textContent = `${state.settings.loupeFrameSize}px`;
   elements.remBase.value = state.settings.remBase;
   elements.smartGuides.checked = state.settings.smartGuides;
 }
